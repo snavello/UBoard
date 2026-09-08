@@ -15,6 +15,8 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.almacen import obtener_almacen
+from app.almacen.base import AlmacenArchivos
 from app.catalogo.sesion import nueva_sesion
 from app.catalogo.tablas import EstadoTarea, Tarea, Usuario, Workspace
 from app.nucleo.config import obtener_configuracion
@@ -28,10 +30,12 @@ MENSAJE_HUERFANA = "El servidor se reinició mientras corría. Volvé a intentar
 
 @dataclass
 class ContextoTarea:
-    """Lo que ve un manejador mientras corre."""
+    """Lo que ve un manejador mientras corre: su sesion de base, su fila y el
+    almacen de archivos (inyectado, para que en tests sea uno temporal)."""
 
     sesion: Session
     tarea: Tarea
+    almacen: AlmacenArchivos
 
     @property
     def workspace_id(self) -> int | None:
@@ -60,8 +64,14 @@ class ColaLocal(ColaTareas):
     servidor corren de a una, en orden: alcanza para archivos chicos y evita
     dos ingestas pisandose. Cada tarea abre su propia sesion de base."""
 
-    def __init__(self, fabrica_sesiones: Callable[[], Session] = nueva_sesion, hilos: int = 1):
+    def __init__(
+        self,
+        fabrica_sesiones: Callable[[], Session] = nueva_sesion,
+        hilos: int = 1,
+        almacen: AlmacenArchivos | None = None,
+    ):
         self._fabrica_sesiones = fabrica_sesiones
+        self._almacen = almacen
         self._ejecutor = ThreadPoolExecutor(max_workers=hilos, thread_name_prefix="tarea")
         self._futuros: dict[str, Future] = {}
 
@@ -88,7 +98,8 @@ class ColaLocal(ColaTareas):
             sesion.commit()
             try:
                 manejador = obtener_manejador(tarea.tipo)
-                resultado = manejador(ContextoTarea(sesion, tarea), dict(tarea.parametros or {}))
+                almacen = self._almacen or obtener_almacen()
+                resultado = manejador(ContextoTarea(sesion, tarea, almacen), dict(tarea.parametros or {}))
             except ErrorApp as error:
                 sesion.rollback()
                 _terminar(sesion, tarea, error=f"{error.codigo}: {error.mensaje}" + (f" ({error.detalle})" if error.detalle else ""))

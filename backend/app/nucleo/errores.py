@@ -35,6 +35,11 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-TAREA-01": (404, "No encontramos esa tarea."),
     "E-TAREA-02": (500, "Ese tipo de tarea no existe."),
     "E-TAREA-03": (500, "El servidor se reinició mientras la tarea corría."),
+    "E-ING-01": (400, "No pudimos leer el archivo. ¿Es un CSV o un Excel válido?"),
+    "E-ING-02": (413, "El archivo supera el tamaño máximo permitido."),
+    "E-ING-03": (400, "El archivo no tiene filas con datos."),
+    "E-ING-04": (404, "No encontramos esa fuente."),
+    "E-ING-05": (400, "Formato no soportado: subí un .csv, .txt, .tsv, .xlsx o .xlsm."),
     "E-INTERNO-00": (500, "Algo salió mal de nuestro lado. Probá de nuevo en un momento."),
 }
 

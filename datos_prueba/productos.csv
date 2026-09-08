@@ -1,0 +1,41 @@
+id_producto;nombre;categoria;precio_lista;activo
+1;Yerba Mate Cachamai 1kg;Almacén;4.850,00;Si
+2;Azúcar Ledesma 1kg;Almacén;1.320,50;Si
+3;Aceite Girasol Cañuelas 1,5L;Almacén;3.990,00;Si
+4;Arroz Gallo Oro 1kg;Almacén;2.150,00;Si
+5;Fideos Matarazzo 500g;Almacén;1.480,00;Si
+6;Harina 000 Pureza 1kg;Almacén;990,90;Si
+7;Dulce de Leche Ñandú 400g;Almacén;2.790,00;Si
+8;Café La Virginia 250g;Almacén;5.600,00;Si
+9;Galletitas Criollitas 300g;Almacén;1.850,00;Si
+10;Mermelada Arcor Durazno 454g;Almacén;2.320,00;Si
+11;Gaseosa Coca-Cola 2,25L;Bebidas;3.450,00;Si
+12;Agua Villavicencio 2L;Bebidas;1.290,00;Si
+13;Cerveza Quilmes 1L;Bebidas;2.980,00;No
+14;Vino Malbec Trapiche 750ml;Bebidas;6.900,00;Si
+15;Jugo Cepita Naranja 1L;Bebidas;2.100,00;Si
+16;Fernet Branca 750ml;Bebidas;14.500,00;Si
+17;Lavandina Ayudín 1L;Limpieza;1.650,00;Si
+18;Detergente Magistral 750ml;Limpieza;2.890,00;Si
+19;Jabón en polvo Skip 800g;Limpieza;6.100,00;Si
+20;Esponja Mortimer;Limpieza;780,00;Si
+21;Papel higiénico Elite x4;Limpieza;3.200,00;Si
+22;Desodorante ambiente Poett;Limpieza;2.450,00;Si
+23;Shampoo Sedal 340ml;Perfumería;3.980,00;Si
+24;Jabón Dove 90g;Perfumería;1.490,00;Si
+25;Pasta dental Colgate 90g;Perfumería;2.650,00;Si
+26;Desodorante Rexona 150ml;Perfumería;3.750,00;No
+27;Crema Nivea 100ml;Perfumería;4.200,00;Si
+28;Jamón cocido Paladini x kg;Fiambrería;12.900,00;Si
+29;Queso Cremoso La Serenísima x kg;Fiambrería;9.800,00;Si
+30;Salame Milán x kg;Fiambrería;15.400,00;Si
+31;Mortadela Cagnoli x kg;Fiambrería;6.300,00;Si
+32;Queso Sardo x kg;Fiambrería;17.600,00;Si
+33;Pan Lactal Bimbo 500g;Panadería;3.100,00;Si
+34;Facturas x docena;Panadería;6.000,00;Si
+35;Pan francés x kg;Panadería;2.400,00;Si
+36;Medialunas x 6;Panadería;3.600,00;Si
+37;Bizcochos Don Satur;Panadería;1.950,00;Si
+38;Prepizza x 2;Panadería;3.300,00;Si
+39;Tostadas Riera 200g;Panadería;1.700,00;No
+40;Budín de vainilla;Panadería;4.100,00;Si

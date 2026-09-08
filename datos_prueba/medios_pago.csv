@@ -1,0 +1,7 @@
+﻿id_medio_pago,nombre,tipo,cuotas_max
+1,Efectivo,efectivo,0
+2,Tarjeta de débito,tarjeta,1
+3,Tarjeta de crédito,tarjeta,12
+4,Transferencia,transferencia,0
+5,Mercado Pago,billetera,1
+6,Cuenta corriente,credito_interno,1

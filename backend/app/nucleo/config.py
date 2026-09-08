@@ -32,6 +32,9 @@ class Configuracion(BaseSettings):
     # Almacen local de archivos (Parquet y subidas)
     ruta_almacen: Path = RAIZ_PROYECTO / "datos" / "almacen"
 
+    # Limite de cada archivo subido
+    tamanio_maximo_archivo_mb: int = 50
+
     # Cola de tareas local: hilos del ThreadPoolExecutor (1 = de a una, en orden)
     hilos_tareas: int = 1
     # Al arrancar, marcar como error lo que quedo pendiente/corriendo de un

@@ -3,8 +3,9 @@ que es lo que Alembic compara para autogenerar migraciones.
 
 Paso 1 (auth y tenancy): organizacion, workspace, usuario.
 Paso 2 (cola de tareas): tarea.
-Las tablas de fuentes y versiones de modelo/spec se agregan en los pasos que
-las usan, cada una con su migracion.
+Paso 3 (ingesta): fuente.
+Las tablas de versiones de modelo/spec se agregan en los pasos que las usan,
+cada una con su migracion.
 """
 from __future__ import annotations
 
@@ -146,3 +147,43 @@ class Tarea(Base):
     terminada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     workspace: Mapped[Workspace | None] = relationship()
+
+
+class EstadoFuente(enum.StrEnum):
+    LISTA = "lista"
+    ERROR = "error"
+
+
+class Fuente(Base):
+    """Un archivo (o una hoja de Excel) ya normalizado a Parquet. `nombre_tabla`
+    es el identificador que ve el modelo semantico y el nombre de la vista
+    DuckDB; resubir un archivo con el mismo nombre_tabla reemplaza la fuente.
+    `esquema` guarda las columnas con nombre, nombre_origen, tipo, nulos e
+    invalidos; `huella` resume nombre + columnas + tipos."""
+
+    __tablename__ = "fuente"
+    __table_args__ = (UniqueConstraint("workspace_id", "nombre_tabla"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspace.id", ondelete="CASCADE"), index=True)
+    creada_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True)
+    nombre: Mapped[str] = mapped_column(String(120), default="")
+    nombre_tabla: Mapped[str] = mapped_column(String(80))
+    archivo_origen: Mapped[str] = mapped_column(String(255), default="")
+    hoja: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    formato: Mapped[str] = mapped_column(String(10), default="csv")
+    huella: Mapped[str] = mapped_column(String(16), default="")
+    esquema: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    filas: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ruta_parquet: Mapped[str] = mapped_column(String(300), default="")
+    ruta_original: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Como se leyo el archivo: codificacion, delimitador, filas saltadas, hoja
+    opciones: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    estado: Mapped[EstadoFuente] = mapped_column(_enum_por_valor(EstadoFuente, "estado_fuente"), default=EstadoFuente.LISTA)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    workspace: Mapped[Workspace] = relationship()

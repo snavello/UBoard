@@ -1,0 +1,13 @@
+id_vendedor,nombre,sucursal,fecha_ingreso,email
+1,María Pérez,Centro,2019-03-11,maria.perez@tienda.com.ar
+2,Juan Gómez ,Centro,2020-07-01,juan.gomez@tienda.com.ar
+3,Lucía Fernández,Norte,2018-11-20,
+4, Carlos Rodríguez,Norte,2021-02-15,carlos.rodriguez@tienda.com.ar
+5,Ana Martínez,Oeste,2017-05-02,ana.martinez@tienda.com.ar
+6,Diego López,Oeste,2022-09-12,diego.lopez@tienda.com.ar
+7,Sofía Díaz,Centro,2023-01-09,
+8,Martín Sánchez,Norte,2016-08-23,martin.sanchez@tienda.com.ar
+9,Valentina Romero,Oeste,2024-03-04,valentina.romero@tienda.com.ar
+10,Nicolás Álvarez,Centro,2020-10-30,nicolas.alvarez@tienda.com.ar
+11,Camila Torres,Norte,2025-02-17,camila.torres@tienda.com.ar
+12,Federico Ruiz,Oeste,2019-12-02,

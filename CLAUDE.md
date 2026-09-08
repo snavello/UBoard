@@ -57,8 +57,9 @@ backend/
     catalogo/       # tablas SQLAlchemy (tablas.py), base, sesion, operaciones (altas)
     almacen/        # AlmacenArchivos (base), AlmacenLocal, rutas, obtener_almacen
     tareas/         # registro de manejadores, ColaLocal, encolar_tarea, huerfanas
-    ingesta/ perfilado/ inferencia/ modelo/ consultas/ asociativo/
-    dashboard/ asistente/            # según §3 de la spec (se crean por paso)
+    ingesta/        # codificacion, encabezado, tipado, lector_csv/excel, procesador, tarea
+    consultas/      # motor.py (DuckDB por workspace); compilador en el paso 5
+    perfilado/ inferencia/ modelo/ asociativo/ dashboard/ asistente/  # se crean por paso
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
   tests/            # pytest; correr por archivo
@@ -132,9 +133,17 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     `marcar_tareas_huerfanas` al arrancar); tabla `tarea` (migración
     `6f0f88df11ef`); `GET /api/workspaces/{id}/tareas[/{tarea_id}]` para el
     polling. 33 tests nuevos (72 en total).
-  - Pasos 3 a 8: pendientes (ingesta, modelo, compilador, spec y API,
-    frontend, integración). Las tablas `fuente`, `version_modelo` y
-    `version_spec` se crean en el paso que las usa, cada una con su migración.
+  - Paso 3 (ingesta): HECHO 2026-09-08 (v0.4.01). `app/ingesta/`
+    (codificación, encabezado, tipado, lectores CSV y Excel, procesador,
+    tarea `ingesta.procesar_archivo`); tabla `fuente` (migración
+    `ff39a100be3c`); `app/consultas/motor.py` (DuckDB en memoria por
+    workspace con una vista por fuente); `/api/workspaces/{id}/fuentes`
+    (subir 202 + polling, listar, detalle, muestra, borrar);
+    `scripts/generar_datos_prueba.py` y los 5 CSV sintéticos en
+    `datos_prueba/`. 66 tests nuevos (138 en total).
+  - Pasos 4 a 8: pendientes (modelo, compilador, spec y API, frontend,
+    integración). Las tablas `version_modelo` y `version_spec` se crean en
+    el paso que las usa, cada una con su migración.
 - Fases 2, 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -178,6 +187,44 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   como "E-XXX-NN: mensaje"; lo inesperado como "E-INTERNO-00 ref=..." con el
   traceback en el log.
 
+## Reglas de ingesta (vigentes desde el paso 3)
+- **Un solo camino para CSV y Excel**: los lectores dejan una tabla DuckDB
+  con TODAS las columnas VARCHAR y nombres ya normalizados
+  (`normalizar_nombre_columna`: `IdVenta` → `id_venta`, `Año` → `anio`); el
+  tipado (`tipado.py`) decide después, igual para los dos formatos.
+- **El tipado es determinista y a nivel columna**: entero, decimal (estilo
+  coma `1.250,50`, punto `1250.50` o en_us `1,250.50`), fecha y fecha_hora
+  (formatos mezclados, dd/mm antes que mm/dd), booleano (Si/No, true/false)
+  o texto. Un tipo se adopta si ≥ 95 % de los valores distintos convierten
+  (`UMBRAL_TIPADO`); los que no, quedan NULL y se cuentan en
+  `esquema[].invalidos`. Nunca se descarta una fila. Códigos con ceros
+  adelante (`00123`) son texto. `1`/`0` son enteros, no booleanos.
+- **Encoding**: UTF-8 primero (con o sin BOM); si falla, cp1252 salvo que el
+  detector vea un encoding multibyte. No creerle al detector entre codepages
+  de un byte (eligió cp775 para castellano).
+- **Encabezados corridos**: la tabla empieza en la primera fila con el ancho
+  más frecuente del archivo (`detectar_fila_encabezado`); las filas de
+  título quedan en `opciones.filas_saltadas`. Si esa fila parece datos, no
+  hay encabezado y los nombres son `columna_N`.
+- **DuckDB lee el CSV sin sniffer** (`auto_detect = false`, `columns`,
+  `strict_mode = false`, `null_padding`): ya sabemos delimitador y
+  columnas, y el sniffer falla con filas de distinto largo.
+- **El Parquet tiene tipos físicos** (BIGINT, DOUBLE, DATE, TIMESTAMP,
+  BOOLEAN, VARCHAR). El modelo semántico (paso 4) referencia columnas por su
+  nombre normalizado y su `tipo_dato` tiene que coincidir con el del esquema.
+- **Identidad de una fuente = `nombre_tabla`** dentro del workspace (stem del
+  archivo normalizado; en Excel con varias hojas, `archivo_hoja`). Resubir
+  con el mismo nombre_tabla REEMPLAZA Parquet y esquema en la misma fila
+  (`reemplazada: true` en el resultado de la tarea); el diff de esquema es
+  de la fase 4. `huella` = sha256(nombre_tabla + columnas:tipos)[:16].
+- **Vistas DuckDB por workspace** (`consultas/motor.py`): una base en
+  memoria por workspace con `CREATE VIEW nombre_tabla AS read_parquet(uri)`;
+  se reconstruye sola si cambia la firma de las fuentes y se invalida al
+  ingestar o borrar. Cada llamador pide `conexion(...)` y cierra el cursor.
+- La subida responde **202 con las tareas** (una por archivo) y el original
+  queda en `subidas/{token}/{nombre_seguro}` para reprocesar; el frontend
+  hace polling y después lista las fuentes.
+
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases
   secuenciales; dentro de cada fase, pasos chicos verificados de verdad.
@@ -196,5 +243,7 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - Migraciones (desde `backend/`): `alembic upgrade head` / `alembic revision --autogenerate -m "que cambia"`.
 - Datos de demo: `.venv/Scripts/python.exe backend/scripts/crear_organizacion.py demo`
   (o `plataforma` / `organizacion` para altas puntuales; `--help`).
+- Regenerar los CSV sintéticos: `.venv/Scripts/python.exe backend/scripts/generar_datos_prueba.py`
+  (escribe `datos_prueba/`; ver su README para la suciedad de cada archivo).
 - Tests (desde `backend/`): `for f in tests/test_*.py; do ../.venv/Scripts/python.exe -m pytest "$f" || break; done`
 - Todo en Docker como producción: `docker compose up --build`.

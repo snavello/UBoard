@@ -100,10 +100,10 @@ def cliente(fabrica_test, sesion_db) -> TestClient:
 
 
 @pytest.fixture
-def cola(fabrica_test) -> ColaLocal:
-    """Cola local con sesiones de la base de tests, inyectada en la app.
-    `cola.esperar(id)` bloquea hasta que la tarea termina."""
-    cola_local = ColaLocal(fabrica_sesiones=fabrica_test, hilos=1)
+def cola(fabrica_test, almacen_temporal) -> ColaLocal:
+    """Cola local con sesiones de la base de tests y el almacen temporal,
+    inyectada en la app. `cola.esperar(id)` bloquea hasta que la tarea termina."""
+    cola_local = ColaLocal(fabrica_sesiones=fabrica_test, hilos=1, almacen=almacen_temporal)
     app.dependency_overrides[obtener_cola] = lambda: cola_local
     try:
         yield cola_local

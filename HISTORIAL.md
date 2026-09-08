@@ -117,3 +117,63 @@ Postgres). Total 72. La primera corrida de `test_tareas.py` dio
 `MemoryError` y las shells dejaron de poder hacer fork: fue presión de
 memoria del equipo (Docker Desktop + varios Python), no del código; tras
 reiniciar la sesión pasaron todos a la primera.
+
+## 2026-09-08 — Fase 1, paso 3: ingesta (v0.4.01)
+
+**Decisión de alcance.** La spec pone la inferencia de tipos en el perfilado
+(fase 2), pero sin columnas DATE y DOUBLE reales el filtro de fechas y el
+gráfico mensual de la fase 1 no funcionan. Se movió a la ingesta un **tipado
+determinista** (sin IA, sin estadísticas más allá de contar) como parte de la
+"normalización"; el perfilado de la fase 2 suma cardinalidad, min/max, top
+valores y patrones semánticos sobre columnas ya tipadas.
+
+**Datos sintéticos.** Como los CSV reales no estaban, Sd pidió generarlos.
+`generar_datos_prueba.py` produce 3.000 ventas de un año, 3 sucursales, 12
+vendedores, 40 productos, 6 medios de pago y ~3.270 pagos, con la suciedad
+documentada en `datos_prueba/README.md` (latin-1, BOM, `;`, coma decimal,
+títulos antes del encabezado, fechas en tres formatos, huérfanos, `$ `).
+Están commiteados (240 KB) y un test los regenera en tmp y los ingesta.
+
+**Cómo se lee un CSV.** Decodificar (UTF-8 → cp1252 → detector solo para
+multibyte), detectar delimitador por el que parte más líneas en el mismo
+número de campos, detectar la fila de encabezado por el ancho más frecuente,
+normalizar nombres (CamelCase → snake, sin tildes, `ñ` → `ni` para que `Año`
+sea `anio` y no `ano`), reescribir en UTF-8 y leer con DuckDB **sin
+sniffer**. Se probó en el scratchpad: con `names=` DuckDB sigue sniffeando y
+falla con filas de distinto largo; con `columns=` + `auto_detect=false` +
+`strict_mode=false` + `null_padding=true` rellena las cortas y recorta las
+largas. Excel entra por openpyxl (solo lectura, celdas ya tipadas pasadas a
+texto canónico) y sigue el mismo camino.
+
+**Tipado.** Decisión sobre la muestra de valores DISTINTOS de cada columna
+(hasta 5.000), orden booleano → entero → decimal → fecha → texto, umbral
+95 %. Detalles que costaron: `1.234` sin ninguna coma en la columna es un
+decimal con punto, no mil doscientos treinta y cuatro; en la muestra de
+distintos la frecuencia de formatos de fecha es por valor distinto, no por
+fila (irrelevante para COALESCE, pero el test lo asumía al revés); las
+fechas del test de inválidos iban del 1 al 39 de enero (bug del test, no del
+código). El detector de encoding eligió cp775 (báltico) para un CSV corto en
+castellano: de ahí la regla de no creerle entre codepages de un byte.
+
+**Modelo de datos.** `fuente` con `nombre_tabla` único por workspace (la
+identidad para resubir), `esquema` JSONB (nombre, nombre_origen, tipo,
+nulos, invalidos, detalle), `huella`, `opciones` de lectura, `ruta_parquet`
+y `ruta_original`. El motor DuckDB por workspace vive en
+`consultas/motor.py` y ya lo usa la muestra; el compilador del paso 5 se
+apoya en él.
+
+**Tests.** 66 nuevos: 26 encabezado/encoding, 15 tipado (cada decisión
+verificada ejecutando el SQL en DuckDB), 12 archivos (CSV sucios y Excel de
+varias hojas), 6 de los datos sintéticos, 7 de la API (subida 202 + polling,
+muestra, resubida que reemplaza, Excel de dos hojas, roles y aislamiento,
+rechazos antes de encolar, archivo roto → tarea en error, borrado). Total
+138. Además se probó en vivo contra uvicorn: los 5 CSV subidos de una con
+curl como `constructor@demo.local`, las 5 tareas terminadas en 2 segundos,
+tipos correctos y "Almacén"/"Azúcar" bien decodificados desde latin-1. La
+organización Demo del Postgres local quedó con las 5 fuentes cargadas, listas
+para el modelo a mano del paso 4.
+
+**Ojo con los servidores de prueba.** `kill $PID` desde Git Bash NO mata un
+uvicorn lanzado con `&` (el uvicorn del paso 1 siguió vivo en el 8001 y
+respondió 405 a la prueba del paso 3 con código viejo). Matar por puerto con
+PowerShell: `Get-NetTCPConnection -LocalPort 8002 -State Listen | % { Stop-Process -Id $_.OwningProcess -Force }`.
