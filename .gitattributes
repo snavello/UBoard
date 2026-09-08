@@ -1,0 +1,7 @@
+# Normalizar finales de linea en el repo (LF). En Windows git puede convertir a
+# CRLF al hacer checkout, pero los scripts que corren dentro de Linux (Docker)
+# tienen que quedar siempre en LF.
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.sql text eol=lf
