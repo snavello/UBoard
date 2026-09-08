@@ -1,0 +1,9 @@
+.git
+.venv
+.env
+datos/
+frontend/node_modules/
+backend/app/estatico/
+**/__pycache__/
+.pytest_cache/
+docs/

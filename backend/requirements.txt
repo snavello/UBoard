@@ -1,0 +1,16 @@
+# Dependencias de produccion de UBoard. Pinneadas exactas: lo que corre en
+# produccion es lo mismo que se probo en la PC. Al subir una version, correr
+# los tests por archivo antes de commitear.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+pydantic-settings==2.15.0
+sqlalchemy==2.0.52
+alembic==1.19.2
+psycopg[binary]==3.3.5
+duckdb==1.5.5
+pyarrow==25.0.1
+openpyxl==3.1.5
+charset-normalizer==3.5.1
+pyjwt==2.13.0
+python-multipart==0.0.32

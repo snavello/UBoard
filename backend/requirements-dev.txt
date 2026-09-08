@@ -1,0 +1,4 @@
+# Dependencias SOLO de desarrollo y tests. No van a requirements.txt: la
+# imagen de produccion no las necesita.
+pytest==9.1.1
+httpx==0.28.1

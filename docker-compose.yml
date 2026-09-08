@@ -1,0 +1,49 @@
+# Dos servicios, como fija la especificacion: app (FastAPI + React compilado +
+# DuckDB embebido) y postgres (catalogo).
+#
+# Desarrollo diario: solo `docker compose up -d postgres` y correr uvicorn y
+# Vite locales (ver README). `docker compose up --build` levanta todo como en
+# produccion.
+services:
+  postgres:
+    image: postgres:16
+    container_name: uboard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: uboard
+      POSTGRES_PASSWORD: uboard-dev-local
+      POSTGRES_DB: uboard_dev
+    ports:
+      # 5433 en el host: el 5432 lo usa el Postgres de Mi Trabajo.
+      - "5433:5432"
+    volumes:
+      - uboard-postgres:/var/lib/postgresql/data
+      # Crea ademas la base uboard_test para los tests de API.
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uboard -d uboard_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: uboard-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://uboard:uboard-dev-local@postgres:5432/uboard_dev
+      SECRETO_SESION: ${SECRETO_SESION:-cambiar-este-secreto-en-produccion}
+      MINUTOS_INACTIVIDAD: ${MINUTOS_INACTIVIDAD:-15}
+      RUTA_ALMACEN: /datos/almacen
+      ENTORNO: ${ENTORNO:-local}
+    ports:
+      - "8000:8000"
+    volumes:
+      - uboard-almacen:/datos/almacen
+
+volumes:
+  uboard-postgres:
+  uboard-almacen:

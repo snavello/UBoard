@@ -1,0 +1,22 @@
+# Secretos y entorno local
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Datos locales: Parquet del almacen y archivos subidos (volumen en Docker)
+datos/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+backend/app/estatico/
+
+# Editor y sistema
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
