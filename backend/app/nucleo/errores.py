@@ -51,6 +51,10 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-CONS-07": (400, "La consulta no es válida: tiene que pedir al menos una métrica o una dimensión."),
     "E-CONS-08": (400, "El orden referencia una columna que la consulta no devuelve."),
     "E-CONS-09": (500, "La consulta falló al ejecutarse."),
+    "E-SPEC-01": (422, "El dashboard tiene errores. Revisá el detalle y volvé a cargarlo."),
+    "E-SPEC-02": (404, "Este workspace todavía no tiene un dashboard."),
+    "E-SPEC-03": (404, "No existe esa versión del dashboard."),
+    "E-SPEC-04": (404, "Ese filtro, gráfico o pestaña no está en el dashboard."),
     "E-INTERNO-00": (500, "Algo salió mal de nuestro lado. Probá de nuevo en un momento."),
 }
 

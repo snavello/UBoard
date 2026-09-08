@@ -5,7 +5,7 @@ Paso 1 (auth y tenancy): organizacion, workspace, usuario.
 Paso 2 (cola de tareas): tarea.
 Paso 3 (ingesta): fuente.
 Paso 4 (modelo semantico): version_modelo.
-La tabla de versiones del spec se agrega en el paso 6 con su migracion.
+Paso 6 (dashboard): version_spec.
 """
 from __future__ import annotations
 
@@ -204,6 +204,28 @@ class VersionModelo(Base):
     contenido: Mapped[dict[str, Any]] = mapped_column(JSONB)
     operacion: Mapped[str] = mapped_column(String(60))
     diff: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    resumen: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True)
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    workspace: Mapped[Workspace] = relationship()
+
+
+class VersionSpec(Base):
+    """Versiones del SpecDashboard, espejo de version_modelo. `modelo_version`
+    es la version del modelo contra la que se valido: si el modelo cambia
+    despues, el dashboard se revalida al abrirlo y avisa que paneles ya no
+    cierran."""
+
+    __tablename__ = "version_spec"
+    __table_args__ = (UniqueConstraint("workspace_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspace.id", ondelete="CASCADE"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    modelo_version: Mapped[int] = mapped_column(Integer)
+    contenido: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    operacion: Mapped[str] = mapped_column(String(60))
     resumen: Mapped[str | None] = mapped_column(String(300), nullable=True)
     autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True)
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

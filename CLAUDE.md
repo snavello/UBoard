@@ -60,7 +60,8 @@ backend/
     ingesta/        # codificacion, encabezado, tipado, lector_csv/excel, procesador, tarea
     consultas/      # motor (DuckDB por workspace), esquema (ConsultaSemantica), compilador (SQL), ejecutor
     modelo/         # esquema (Pydantic), validacion (3 capas + efectivo), operaciones (versiones)
-    perfilado/ inferencia/ asociativo/ dashboard/ asistente/  # se crean por paso
+    dashboard/      # esquema del spec, validacion (compila paneles), filtros, paneles, operaciones
+    perfilado/ inferencia/ asociativo/ asistente/  # fases 2 a 4
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
   tests/            # pytest; correr por archivo
@@ -155,8 +156,16 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     multiplicación de filas, filtros por semi-join, cocientes, granularidad,
     `entidad_base` para el explorador, orden, límite y desplazamiento. 36
     tests contra los 5 CSV comparando con SQL a mano (211 en total).
-  - Pasos 6 a 8: pendientes (spec y API del dashboard, frontend,
-    integración). La tabla `version_spec` se crea en el paso 6.
+  - Paso 6 (spec y API del dashboard): HECHO 2026-09-08 (v0.7.01).
+    `app/dashboard/` (esquema del §5, validación que compila cada panel,
+    filtros activos, paneles como ConsultaSemantica, versionado); tabla
+    `version_spec` (migración `ed7806959de1`); `/api/workspaces/{id}/dashboard`
+    (spec GET/PUT/validar/versiones; `kpis`, `graficos/{id}`,
+    `explorador/{entidad}` paginado, `filtros/{id}/opciones`, todos con
+    `?filtros=`); `datos_prueba/spec.json`; `scripts/cargar_prueba.py`
+    (carga de punta a punta contra un servidor). 26 tests nuevos (237 en
+    total). **El backend de la fase 1 está completo.**
+  - Pasos 7 (frontend) y 8 (integración y aceptación): pendientes.
 - Fases 2, 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -296,6 +305,32 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - Alias de dimensión por defecto = `"entidad.campo"`; orden por defecto =
   dimensiones ascendentes, `NULLS LAST`.
 
+## Reglas del dashboard (vigentes desde el paso 6)
+- **El spec se valida compilando cada panel** contra el modelo efectivo con
+  el compilador real (sin ejecutar) y con un valor ficticio en TODOS los
+  filtros del spec: un gráfico que multiplica filas o un filtro que ningún
+  panel puede aplicar fallan al cargar el spec (`E-SPEC-01`, códigos
+  `SPEC-*`), no al abrir el dashboard. Un gráfico sobre una fecha exige
+  `granularidad`.
+- **Filtros activos**: `?filtros=<JSON>` con `{id_filtro: valor}`;
+  `rango_fecha` = `[desde, hasta]` (extremos abiertos con null), `lista` =
+  `[valores]`. Se traducen en `dashboard/filtros.py` a filtros de consulta y
+  se aplican a KPIs, gráficos, explorador y total del explorador por igual.
+  Las opciones de un filtro `lista` son todos los valores del campo (sin
+  asociativo hasta la fase 4); las de `rango_fecha`, mínimo y máximo.
+- **Paneles** (`dashboard/paneles.py`): KPIs en UNA consulta (todas las
+  métricas juntas); gráfico = una métrica por una dimensión (alias
+  `dimension`), línea ordenada por la dimensión, barras y torta por la
+  métrica desc con `top`; explorador = `entidad_base` de la pestaña, columnas
+  propias o `entidad.campo`, con la clave primaria antepuesta como columna
+  oculta (`__pk_*`) para que no se fundan filas iguales, paginado con
+  `pagina`/`tamanio`, orden por alias o métrica, y `total` contado aparte.
+- **El spec guarda `modelo_version`**. Si el modelo cambia después, `GET
+  /dashboard` revalida y devuelve `advertencias` con los paneles rotos; esos
+  paneles responden `E-CONS-01` hasta que se corrija el spec.
+- Los valores salen crudos (números, fechas ISO); el frontend formatea con
+  locale es-AR según `formato` (moneda, entero, decimal, porcentaje).
+
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases
   secuenciales; dentro de cada fase, pasos chicos verificados de verdad.
@@ -316,5 +351,7 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   (o `plataforma` / `organizacion` para altas puntuales; `--help`).
 - Regenerar los CSV sintéticos: `.venv/Scripts/python.exe backend/scripts/generar_datos_prueba.py`
   (escribe `datos_prueba/`; ver su README para la suciedad de cada archivo).
+- Cargar todo en un servidor corriendo (CSV + modelo + spec, como el constructor
+  de la demo): `.venv/Scripts/python.exe backend/scripts/cargar_prueba.py [--url http://localhost:8000]`.
 - Tests (desde `backend/`): `for f in tests/test_*.py; do ../.venv/Scripts/python.exe -m pytest "$f" || break; done`
 - Todo en Docker como producción: `docker compose up --build`.

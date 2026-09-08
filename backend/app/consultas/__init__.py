@@ -7,7 +7,7 @@
 - ejecutor.py: corre el SQL en el motor y devuelve una tabla tipada.
 """
 from app.consultas.compilador import Compilador, SQLCompilado, compilar
-from app.consultas.ejecutor import ResultadoConsulta, consultar, ejecutar_compilada
+from app.consultas.ejecutor import ResultadoConsulta, consultar, contar, ejecutar_compilada
 from app.consultas.esquema import ConsultaSemantica, DimensionConsulta, FiltroConsulta, OrdenConsulta, parsear_consulta
 
 __all__ = [
@@ -20,6 +20,7 @@ __all__ = [
     "SQLCompilado",
     "compilar",
     "consultar",
+    "contar",
     "ejecutar_compilada",
     "parsear_consulta",
 ]

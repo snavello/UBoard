@@ -195,6 +195,14 @@ def modelo_prueba() -> dict:
 
 
 @pytest.fixture
+def spec_prueba() -> dict:
+    """El spec de dashboard escrito a mano para el modelo de prueba (copia fresca)."""
+    import json
+
+    return json.loads((DATOS_PRUEBA / "spec.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture
 def ingresar(cliente):
     """Hace login y deja la cookie en el cliente. Devuelve la respuesta."""
 

@@ -254,3 +254,41 @@ resultado comparado con SQL escrito a mano (totales que cierran, top N,
 rango de fecha, semi-join, dos entidades por la misma dimensión, explorador
 paginado, valores distintos) más 14 consultas inválidas con su código y un
 test de la forma exacta del SQL generado. Total 211.
+
+## 2026-09-08 — Fase 1, paso 6: spec y API del dashboard (v0.7.01)
+
+**Idea central: el spec se valida compilando.** Además de comprobar
+referencias, cada KPI, gráfico y pestaña se arma como `ConsultaSemantica` y
+se pasa por el compilador con todos los filtros del spec puestos con un valor
+ficticio. Así "total de ventas por medio de pago" (multiplica filas) o un
+filtro que no llega a la entidad de un panel fallan al guardar el spec, con
+la ubicación del panel, y no al abrir el dashboard. El mismo módulo
+`paneles.py` arma las consultas para la API: no hay dos versiones de "qué
+pide un gráfico".
+
+**Decisiones de forma.** Los filtros activos viajan en la query string como
+JSON (`?filtros={"f_fecha": ["2026-01-01", null]}`) para que TanStack Query
+los use como clave de cache y los GET sean compartibles por URL. El
+explorador antepone la clave primaria de la entidad como columna oculta
+(`__pk_*`): sin ella, dos ventas iguales se fundirían en una fila al agrupar.
+Las opciones de un filtro de fecha (mínimo y máximo) se resuelven sin SQL a
+mano: se agregan dos métricas efímeras al modelo en memoria y se consulta como
+un KPI. El único SQL fuera del compilador es `SELECT count(*) FROM (...)` en
+`ejecutor.contar`, para el total del explorador.
+
+**Spec a mano.** 5 filtros (período, sucursal, vendedor, categoría y medio de
+pago; el último cruza el paso inseguro ventas → pagos y por eso es un buen
+test del semi-join), 5 KPIs, 4 gráficos (ventas por mes, top 10 vendedores,
+ventas por categoría, cobros por medio de pago) y 4 pestañas del explorador.
+
+**Script de punta a punta.** `cargar_prueba.py` (httpx) hace login, sube los
+5 CSV, espera las tareas, carga modelo y spec e imprime los KPIs. Corrido
+contra uvicorn sobre la organización Demo: las fuentes se reemplazaron
+(`reemplazada`), el modelo quedó en versión 2 y el spec en versión 1.
+
+**Tests.** 26 nuevos: 17 puros de esquema, validación, filtros activos y
+paneles; 9 de API con todo cargado (KPIs y gráficos que cierran entre sí,
+filtros que afectan a todo incluido el total del explorador, opciones,
+paginado y orden, errores, spec inválido, advertencias cuando cambia el
+modelo, roles y aislamiento). Total 237. Con esto el backend de la fase 1
+está completo: falta el frontend (paso 7) y la aceptación (paso 8).

@@ -40,6 +40,16 @@ def ejecutar_compilada(conexion: duckdb.DuckDBPyConnection, compilada: SQLCompil
     return ResultadoConsulta(compilada.columnas, [list(fila) for fila in filas], compilada.sql)
 
 
+def contar(conexion: duckdb.DuckDBPyConnection, compilada: SQLCompilado) -> int:
+    """Cantidad de filas que devolveria la consulta (compilarla sin limite ni
+    orden). Es la unica envoltura de SQL fuera del compilador, y no mira el
+    modelo: solo cuenta."""
+    try:
+        return conexion.execute(f"SELECT count(*) FROM ({compilada.sql}) AS consulta", compilada.parametros).fetchone()[0]
+    except duckdb.Error as error:
+        raise ErrorApp("E-CONS-09", f"{type(error).__name__}: {str(error).splitlines()[0]} | SQL: {compilada.sql}") from error
+
+
 def consultar(
     sesion: Session,
     workspace: Workspace,

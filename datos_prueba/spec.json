@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "titulo": "Ventas del almacén",
+  "filtros": [
+    {"id": "f_fecha", "campo": "ventas.fecha", "tipo": "rango_fecha", "etiqueta": "Período"},
+    {"id": "f_sucursal", "campo": "vendedores.sucursal", "tipo": "lista", "etiqueta": "Sucursal"},
+    {"id": "f_vendedor", "campo": "vendedores.nombre", "tipo": "lista", "etiqueta": "Vendedor"},
+    {"id": "f_categoria", "campo": "productos.categoria", "tipo": "lista", "etiqueta": "Categoría"},
+    {"id": "f_medio", "campo": "medios_pago.nombre", "tipo": "lista", "etiqueta": "Medio de pago"}
+  ],
+  "kpis": [
+    {"id": "k_total", "metrica": "total_ventas"},
+    {"id": "k_cantidad", "metrica": "cantidad_ventas"},
+    {"id": "k_ticket", "metrica": "ticket_promedio"},
+    {"id": "k_unidades", "metrica": "unidades_vendidas"},
+    {"id": "k_pagado", "metrica": "total_pagado"}
+  ],
+  "graficos": [
+    {"id": "g_mes", "tipo": "linea", "metrica": "total_ventas", "dimension": "ventas.fecha", "granularidad": "mes", "titulo": "Ventas por mes"},
+    {"id": "g_vendedores", "tipo": "barras", "metrica": "total_ventas", "dimension": "vendedores.nombre", "top": 10, "titulo": "Top vendedores"},
+    {"id": "g_categorias", "tipo": "barras", "metrica": "total_ventas", "dimension": "productos.categoria", "titulo": "Ventas por categoría"},
+    {"id": "g_medios", "tipo": "torta", "metrica": "total_pagado", "dimension": "medios_pago.nombre", "titulo": "Cobros por medio de pago"}
+  ],
+  "explorador": {
+    "pestanias": [
+      {"entidad": "productos", "columnas": ["nombre", "categoria", "precio_lista", "activo"], "metricas": ["total_ventas", "unidades_vendidas"]},
+      {"entidad": "vendedores", "columnas": ["nombre", "sucursal", "fecha_ingreso"], "metricas": ["total_ventas", "cantidad_ventas"]},
+      {"entidad": "ventas", "columnas": ["fecha", "importe", "cantidad", "vendedores.nombre", "productos.nombre"], "tamanio_pagina": 50},
+      {"entidad": "pagos", "columnas": ["fecha_pago", "monto", "cuotas", "medios_pago.nombre", "ventas.fecha"], "tamanio_pagina": 50}
+    ]
+  }
+}
