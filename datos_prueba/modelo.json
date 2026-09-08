@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "umbral_confianza": 0.9,
+  "entidades": [
+    {
+      "id": "ventas",
+      "nombre": "Ventas",
+      "fuente": "ventas",
+      "tipo": "hechos",
+      "clave_primaria": ["id_venta"],
+      "sinonimos": ["operaciones", "facturación", "tickets"],
+      "descripcion": "Una fila por venta (un producto por ticket).",
+      "campos": [
+        {"id": "id_venta", "columna_origen": "id_venta", "nombre": "ID venta", "tipo_dato": "entero", "tipo_semantico": "identificador"},
+        {"id": "fecha", "columna_origen": "fecha", "nombre": "Fecha", "tipo_dato": "fecha", "tipo_semantico": "fecha"},
+        {"id": "id_vendedor", "columna_origen": "vendedor", "nombre": "Vendedor", "tipo_dato": "entero", "tipo_semantico": "clave_foranea"},
+        {"id": "id_producto", "columna_origen": "id_producto", "nombre": "Producto", "tipo_dato": "entero", "tipo_semantico": "clave_foranea"},
+        {"id": "cantidad", "columna_origen": "cantidad", "nombre": "Cantidad", "tipo_dato": "entero", "tipo_semantico": "cantidad"},
+        {"id": "precio_unitario", "columna_origen": "precio_unitario", "nombre": "Precio unitario", "tipo_dato": "decimal", "tipo_semantico": "monto"},
+        {"id": "importe", "columna_origen": "importe", "nombre": "Importe", "tipo_dato": "decimal", "tipo_semantico": "monto"}
+      ]
+    },
+    {
+      "id": "vendedores",
+      "nombre": "Vendedores",
+      "fuente": "vendedores",
+      "tipo": "dimension",
+      "clave_primaria": ["id_vendedor"],
+      "sinonimos": ["empleados", "personal de ventas"],
+      "campos": [
+        {"id": "id_vendedor", "columna_origen": "id_vendedor", "nombre": "ID vendedor", "tipo_dato": "entero", "tipo_semantico": "identificador"},
+        {"id": "nombre", "columna_origen": "nombre", "nombre": "Nombre", "tipo_dato": "texto", "tipo_semantico": "categoria"},
+        {"id": "sucursal", "columna_origen": "sucursal", "nombre": "Sucursal", "tipo_dato": "texto", "tipo_semantico": "categoria"},
+        {"id": "fecha_ingreso", "columna_origen": "fecha_ingreso", "nombre": "Fecha de ingreso", "tipo_dato": "fecha", "tipo_semantico": "fecha"},
+        {"id": "email", "columna_origen": "email", "nombre": "Email", "tipo_dato": "texto", "tipo_semantico": "texto_libre"}
+      ]
+    },
+    {
+      "id": "productos",
+      "nombre": "Productos",
+      "fuente": "productos",
+      "tipo": "dimension",
+      "clave_primaria": ["id_producto"],
+      "sinonimos": ["artículos", "mercadería"],
+      "campos": [
+        {"id": "id_producto", "columna_origen": "id_producto", "nombre": "ID producto", "tipo_dato": "entero", "tipo_semantico": "identificador"},
+        {"id": "nombre", "columna_origen": "nombre", "nombre": "Producto", "tipo_dato": "texto", "tipo_semantico": "categoria"},
+        {"id": "categoria", "columna_origen": "categoria", "nombre": "Categoría", "tipo_dato": "texto", "tipo_semantico": "categoria"},
+        {"id": "precio_lista", "columna_origen": "precio_lista", "nombre": "Precio de lista", "tipo_dato": "decimal", "tipo_semantico": "monto"},
+        {"id": "activo", "columna_origen": "activo", "nombre": "Activo", "tipo_dato": "booleano", "tipo_semantico": "booleano"}
+      ]
+    },
+    {
+      "id": "pagos",
+      "nombre": "Pagos",
+      "fuente": "pagos",
+      "tipo": "hechos",
+      "clave_primaria": ["id_pago"],
+      "sinonimos": ["cobros", "cobranzas"],
+      "descripcion": "Una fila por pago; una venta puede pagarse en más de una parte.",
+      "campos": [
+        {"id": "id_pago", "columna_origen": "id_pago", "nombre": "ID pago", "tipo_dato": "entero", "tipo_semantico": "identificador"},
+        {"id": "id_venta", "columna_origen": "id_venta", "nombre": "Venta", "tipo_dato": "entero", "tipo_semantico": "clave_foranea"},
+        {"id": "id_medio_pago", "columna_origen": "id_medio_pago", "nombre": "Medio de pago", "tipo_dato": "entero", "tipo_semantico": "clave_foranea"},
+        {"id": "fecha_pago", "columna_origen": "fecha_pago", "nombre": "Fecha de pago", "tipo_dato": "fecha", "tipo_semantico": "fecha"},
+        {"id": "monto", "columna_origen": "monto", "nombre": "Monto", "tipo_dato": "decimal", "tipo_semantico": "monto"},
+        {"id": "cuotas", "columna_origen": "cuotas", "nombre": "Cuotas", "tipo_dato": "entero", "tipo_semantico": "cantidad"}
+      ]
+    },
+    {
+      "id": "medios_pago",
+      "nombre": "Medios de pago",
+      "fuente": "medios_pago",
+      "tipo": "dimension",
+      "clave_primaria": ["id_medio_pago"],
+      "sinonimos": ["formas de pago"],
+      "campos": [
+        {"id": "id_medio_pago", "columna_origen": "id_medio_pago", "nombre": "ID medio de pago", "tipo_dato": "entero", "tipo_semantico": "identificador"},
+        {"id": "nombre", "columna_origen": "nombre", "nombre": "Medio de pago", "tipo_dato": "texto", "tipo_semantico": "categoria"},
+        {"id": "tipo", "columna_origen": "tipo", "nombre": "Tipo", "tipo_dato": "texto", "tipo_semantico": "categoria"},
+        {"id": "cuotas_max", "columna_origen": "cuotas_max", "nombre": "Cuotas máximas", "tipo_dato": "entero", "tipo_semantico": "cantidad"}
+      ]
+    }
+  ],
+  "relaciones": [
+    {"id": "ventas_vendedor", "desde": {"entidad": "ventas", "campo": "id_vendedor"}, "hacia": {"entidad": "vendedores", "campo": "id_vendedor"}, "cardinalidad": "n:1"},
+    {"id": "ventas_producto", "desde": {"entidad": "ventas", "campo": "id_producto"}, "hacia": {"entidad": "productos", "campo": "id_producto"}, "cardinalidad": "n:1"},
+    {"id": "pagos_venta", "desde": {"entidad": "pagos", "campo": "id_venta"}, "hacia": {"entidad": "ventas", "campo": "id_venta"}, "cardinalidad": "n:1"},
+    {"id": "pagos_medio", "desde": {"entidad": "pagos", "campo": "id_medio_pago"}, "hacia": {"entidad": "medios_pago", "campo": "id_medio_pago"}, "cardinalidad": "n:1"}
+  ],
+  "metricas": [
+    {"id": "total_ventas", "nombre": "Total ventas", "expresion": {"agregacion": "suma", "campo": "ventas.importe"}, "formato": "moneda"},
+    {"id": "cantidad_ventas", "nombre": "Cantidad de ventas", "expresion": {"agregacion": "conteo", "campo": "ventas.id_venta"}, "formato": "entero"},
+    {"id": "unidades_vendidas", "nombre": "Unidades vendidas", "expresion": {"agregacion": "suma", "campo": "ventas.cantidad"}, "formato": "entero"},
+    {"id": "ticket_promedio", "nombre": "Ticket promedio", "expresion": {"numerador": "total_ventas", "denominador": "cantidad_ventas"}, "formato": "moneda"},
+    {"id": "vendedores_activos", "nombre": "Vendedores con ventas", "expresion": {"agregacion": "conteo_distinto", "campo": "ventas.id_vendedor"}, "formato": "entero"},
+    {"id": "total_pagado", "nombre": "Total pagado", "expresion": {"agregacion": "suma", "campo": "pagos.monto"}, "formato": "moneda"},
+    {"id": "cantidad_pagos", "nombre": "Cantidad de pagos", "expresion": {"agregacion": "conteo", "campo": "pagos.id_pago"}, "formato": "entero"},
+    {"id": "cuotas_promedio", "nombre": "Cuotas promedio", "expresion": {"agregacion": "promedio", "campo": "pagos.cuotas"}, "formato": "decimal"}
+  ],
+  "dimensiones_tiempo": [
+    {"campo": "ventas.fecha", "granularidades": ["dia", "semana", "mes", "trimestre", "anio"]},
+    {"campo": "pagos.fecha_pago", "granularidades": ["mes", "trimestre", "anio"]}
+  ]
+}

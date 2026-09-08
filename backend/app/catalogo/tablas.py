@@ -4,8 +4,8 @@ que es lo que Alembic compara para autogenerar migraciones.
 Paso 1 (auth y tenancy): organizacion, workspace, usuario.
 Paso 2 (cola de tareas): tarea.
 Paso 3 (ingesta): fuente.
-Las tablas de versiones de modelo/spec se agregan en los pasos que las usan,
-cada una con su migracion.
+Paso 4 (modelo semantico): version_modelo.
+La tabla de versiones del spec se agrega en el paso 6 con su migracion.
 """
 from __future__ import annotations
 
@@ -185,5 +185,27 @@ class Fuente(Base):
     actualizada_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    workspace: Mapped[Workspace] = relationship()
+
+
+class VersionModelo(Base):
+    """Cada cambio al modelo semantico es una fila nueva con el modelo ENTERO
+    (`contenido`), asi deshacer es volver a la version anterior. `operacion`
+    dice que lo produjo (hoy solo `cargar_json`; despues `renombrar_campo`,
+    `crear_relacion`, ...) y `diff` que cambio respecto de la anterior."""
+
+    __tablename__ = "version_modelo"
+    __table_args__ = (UniqueConstraint("workspace_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspace.id", ondelete="CASCADE"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    contenido: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    operacion: Mapped[str] = mapped_column(String(60))
+    diff: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    resumen: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True)
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workspace: Mapped[Workspace] = relationship()

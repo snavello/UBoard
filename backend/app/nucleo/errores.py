@@ -40,19 +40,25 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-ING-03": (400, "El archivo no tiene filas con datos."),
     "E-ING-04": (404, "No encontramos esa fuente."),
     "E-ING-05": (400, "Formato no soportado: subí un .csv, .txt, .tsv, .xlsx o .xlsm."),
+    "E-MOD-01": (422, "El modelo tiene errores. Revisá el detalle y volvé a cargarlo."),
+    "E-MOD-02": (404, "Este workspace todavía no tiene un modelo cargado."),
+    "E-MOD-03": (404, "No existe esa versión del modelo."),
     "E-INTERNO-00": (500, "Algo salió mal de nuestro lado. Probá de nuevo en un momento."),
 }
 
 
 class ErrorApp(Exception):
     """Error esperado, con codigo del catalogo. `detalle` es opcional y tecnico
-    (que campo, que valor); el mensaje para la persona sale de MENSAJES."""
+    (que campo, que valor); el mensaje para la persona sale de MENSAJES.
+    `extra` son datos estructurados que viajan en el cuerpo (por ejemplo la
+    lista de errores de validacion de un modelo)."""
 
-    def __init__(self, codigo: str, detalle: str | None = None):
+    def __init__(self, codigo: str, detalle: str | None = None, extra: dict | None = None):
         if codigo not in MENSAJES:
             raise ValueError(f"Codigo de error desconocido: {codigo}")
         self.codigo = codigo
         self.detalle = detalle
+        self.extra = extra
         self.estado, self.mensaje = MENSAJES[codigo]
         super().__init__(f"{codigo}: {self.mensaje}")
 
@@ -60,6 +66,8 @@ class ErrorApp(Exception):
         cuerpo = {"codigo": self.codigo, "mensaje": self.mensaje}
         if self.detalle:
             cuerpo["detalle"] = self.detalle
+        if self.extra:
+            cuerpo.update(self.extra)
         return cuerpo
 
 

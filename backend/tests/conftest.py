@@ -35,6 +35,8 @@ from app.nucleo.config import obtener_configuracion  # noqa: E402
 from app.tareas import ColaLocal, obtener_cola  # noqa: E402
 
 RAIZ_BACKEND = Path(__file__).resolve().parents[1]
+DATOS_PRUEBA = RAIZ_BACKEND.parent / "datos_prueba"
+ARCHIVOS_PRUEBA = ["ventas.csv", "vendedores.csv", "productos.csv", "pagos.csv", "medios_pago.csv"]
 CLAVE = "clave-de-prueba-123"
 
 
@@ -161,6 +163,35 @@ def datos(sesion_db) -> DatosBase:
     )
     sesion_db.commit()
     return DatosBase(admin, acme, acme_constructor, acme_visualizador, beta, beta_constructor)
+
+
+@pytest.fixture
+def cargar_datos_prueba(cliente, cola):
+    """Sube los 5 CSV de datos_prueba/ al workspace indicado (el cliente tiene
+    que estar logueado como constructor) y espera a que se ingesten."""
+
+    def _cargar(workspace_id: int) -> list[dict]:
+        archivos = [
+            ("archivos", (nombre, (DATOS_PRUEBA / nombre).read_bytes(), "application/octet-stream"))
+            for nombre in ARCHIVOS_PRUEBA
+        ]
+        respuesta = cliente.post(f"/api/workspaces/{workspace_id}/fuentes", files=archivos)
+        assert respuesta.status_code == 202, respuesta.text
+        for tarea in respuesta.json():
+            cola.esperar(tarea["id"], timeout=120)
+        fuentes = cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()
+        assert len(fuentes) == len(ARCHIVOS_PRUEBA), fuentes
+        return fuentes
+
+    return _cargar
+
+
+@pytest.fixture
+def modelo_prueba() -> dict:
+    """El modelo semantico escrito a mano para los 5 CSV (copia fresca)."""
+    import json
+
+    return json.loads((DATOS_PRUEBA / "modelo.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture

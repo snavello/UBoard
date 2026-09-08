@@ -177,3 +177,37 @@ para el modelo a mano del paso 4.
 uvicorn lanzado con `&` (el uvicorn del paso 1 siguió vivo en el 8001 y
 respondió 405 a la prueba del paso 3 con código viejo). Matar por puerto con
 PowerShell: `Get-NetTCPConnection -LocalPort 8002 -State Listen | % { Stop-Process -Id $_.OwningProcess -Force }`.
+
+## 2026-09-08 — Fase 1, paso 4: modelo semántico (v0.5.01)
+
+**Esquema.** Pydantic v2 siguiendo el §4 de la spec con tres ajustes:
+`Entidad.fuente` (string = `nombre_tabla`) en lugar de `fuente_id` para no
+confundirlo con el id entero de la tabla `fuente`; la expresión de métrica se
+distingue por forma (`{agregacion, campo}` o `{numerador, denominador}`) sin
+un campo `tipo`, así el JSON del ejemplo de la spec entra tal cual; y
+`Relacion.propagar` (bool) previsto para el asociativo de la fase 4. Todo
+`extra="forbid"`. Tipos de dato = los seis que produce la ingesta.
+
+**Validación.** Tres capas separadas para que los mensajes sean precisos y
+la API pueda validar sin guardar. La regla más discutible: el grafo de
+relaciones efectivas tiene que ser un bosque (sin ciclos), porque con un
+ciclo hay dos caminos de joins entre dos entidades y el compilador no puede
+elegir; la spec lo anticipa ("relaciones circulares: se detectan y se pide
+cortar"). Una relación rechazada rompe el ciclo sin borrarla. El lado "1" de
+una relación tiene que ser clave primaria: si no, el join multiplica filas y
+las sumas mienten. Los errores en cascada (una métrica rota arrastra al
+cociente que la usa) se reportan igual: el primero es la causa.
+
+**Bugs propios encontrados por los tests.** El detector de ciclos reportaba
+el mismo ciclo dos veces porque salía del DFS al encontrarlo y el bucle
+externo volvía a entrar por otra entidad de la misma componente; ahora
+primero recorre la componente entera y después busca el ciclo.
+
+**Modelo a mano.** `datos_prueba/modelo.json`: 5 entidades (ventas y pagos
+como hechos), 4 relaciones n:1 que forman un árbol, 8 métricas (incluido el
+`ticket_promedio` como cociente y `vendedores_activos` como conteo distinto)
+y 2 dimensiones de tiempo. El test lo valida contra los esquemas reales de
+los 5 CSV ingestados, y la API lo carga de verdad en Postgres.
+
+**Tests.** 37 nuevos (31 puros de esquema/validación/efectivo/diff, 6 de
+API con los 5 CSV ingestados). Total 175.

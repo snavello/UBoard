@@ -59,7 +59,8 @@ backend/
     tareas/         # registro de manejadores, ColaLocal, encolar_tarea, huerfanas
     ingesta/        # codificacion, encabezado, tipado, lector_csv/excel, procesador, tarea
     consultas/      # motor.py (DuckDB por workspace); compilador en el paso 5
-    perfilado/ inferencia/ modelo/ asociativo/ dashboard/ asistente/  # se crean por paso
+    modelo/         # esquema (Pydantic), validacion (3 capas + efectivo), operaciones (versiones)
+    perfilado/ inferencia/ asociativo/ dashboard/ asistente/  # se crean por paso
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
   tests/            # pytest; correr por archivo
@@ -141,9 +142,15 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     (subir 202 + polling, listar, detalle, muestra, borrar);
     `scripts/generar_datos_prueba.py` y los 5 CSV sintéticos en
     `datos_prueba/`. 66 tests nuevos (138 en total).
-  - Pasos 4 a 8: pendientes (modelo, compilador, spec y API, frontend,
-    integración). Las tablas `version_modelo` y `version_spec` se crean en
-    el paso que las usa, cada una con su migración.
+  - Paso 4 (modelo semántico): HECHO 2026-09-08 (v0.5.01). `app/modelo/`
+    (esquema Pydantic del §4, validación en tres capas, modelo efectivo,
+    versionado con diff); tabla `version_modelo` (migración `29bcd496a2af`);
+    `/api/workspaces/{id}/modelo` (GET actual o `?efectivo=true`, PUT carga,
+    POST validar, GET versiones[/{n}]); `datos_prueba/modelo.json` escrito a
+    mano para los 5 CSV, validado contra sus esquemas reales. 37 tests nuevos
+    (175 en total).
+  - Pasos 5 a 8: pendientes (compilador, spec y API, frontend, integración).
+    La tabla `version_spec` se crea en el paso 6 con su migración.
 - Fases 2, 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -224,6 +231,35 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - La subida responde **202 con las tareas** (una por archivo) y el original
   queda en `subidas/{token}/{nombre_seguro}` para reprocesar; el frontend
   hace polling y después lista las fuentes.
+
+## Reglas del modelo semántico (vigentes desde el paso 4)
+- **Referencias**: `Entidad.fuente` = `nombre_tabla` de la fuente ingestada;
+  `Campo.columna_origen` = nombre normalizado de la columna del Parquet;
+  `Campo.tipo_dato` tiene que coincidir con el tipo del esquema de la
+  fuente. Desde afuera un campo es `"entidad.campo"`. Ids en minúsculas
+  (`^[a-z][a-z0-9_]*$`). Todo con `extra="forbid"`: una clave mal escrita
+  falla al cargar.
+- **Validación en tres capas**, en `modelo/validacion.py`, siempre las tres
+  antes de guardar: (1) Pydantic, (2) estructura (ids únicos, PK existente y
+  confirmada, relaciones a campos existentes del mismo tipo con el lado "1"
+  en clave primaria, sin auto-relaciones, sin dos relaciones entre el mismo
+  par, **sin ciclos** en el grafo de relaciones efectivas, métricas con
+  agregación compatible, cocientes solo entre agregaciones, dimensiones de
+  tiempo sobre fecha/fecha_hora, lo confirmado no depende de lo rechazado),
+  (3) contra las fuentes del workspace. Cada regla tiene un código
+  `MOD-...`; la API devuelve `E-MOD-01` (422) con `errores: [{codigo,
+  ubicacion, mensaje}]`. `POST .../modelo/validar` corre lo mismo sin guardar.
+- **Modelo efectivo** (`modelo_efectivo`): lo que ve el dashboard. Un campo o
+  relación entra si está `confirmada` o `propuesta` con confianza ≥
+  `umbral_confianza` (0.9); una métrica solo si está confirmada y sus campos
+  o métricas entran; una relación o dimensión de tiempo cae si un campo suyo
+  cae. Las entidades quedan todas; su clave primaria debe estar confirmada.
+- **Versionado**: cada carga es una fila nueva en `version_modelo` con el
+  modelo ENTERO (`contenido`), `numero` correlativo por workspace,
+  `operacion` (`cargar_json` hoy), `diff` (ids agregados/quitados/cambiados
+  por colección) y `resumen`. La versión actual es la de mayor `numero`.
+- **Cociente** = numerador / denominador entre ids de métricas de agregación
+  (no anidados). Las expresiones aritméticas libres siguen pendientes.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases
