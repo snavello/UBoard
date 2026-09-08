@@ -10,19 +10,36 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import salud
+from app.api import auth, plataforma, salud, workspaces
+from app.nucleo.config import obtener_configuracion
+from app.nucleo.errores import registrar_manejadores
 from app.version import VERSION
 
 RUTA_ESTATICO = Path(__file__).parent / "estatico"
+SECRETO_POR_DEFECTO = "cambiar-este-secreto-en-produccion"
 
 
 def crear_app() -> FastAPI:
+    _verificar_configuracion()
+
     app = FastAPI(title="UBoard", version=VERSION, docs_url="/api/docs", openapi_url="/api/openapi.json")
+    registrar_manejadores(app)
 
     app.include_router(salud.router, prefix="/api")
+    app.include_router(auth.router, prefix="/api")
+    app.include_router(plataforma.router, prefix="/api")
+    app.include_router(workspaces.router, prefix="/api")
 
     _montar_frontend(app)
     return app
+
+
+def _verificar_configuracion() -> None:
+    """Fuera de local, arrancar con el secreto de ejemplo es un error de
+    despliegue: mejor que no levante."""
+    configuracion = obtener_configuracion()
+    if configuracion.entorno != "local" and configuracion.secreto_sesion == SECRETO_POR_DEFECTO:
+        raise RuntimeError("SECRETO_SESION tiene el valor de ejemplo; definilo antes de arrancar fuera de local")
 
 
 def _montar_frontend(app: FastAPI) -> None:

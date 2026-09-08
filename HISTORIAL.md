@@ -48,3 +48,41 @@ compila sin cambios); `docker-compose.yml` (postgres 16 en 5433 + app),
 **Detalle a recordar.** Las shells de Claude Code comparten el directorio de
 trabajo entre llamadas paralelas: un `cd` en una afecta a la otra. Empezar
 cada comando con `cd` absoluto.
+
+## 2026-09-08 — Fase 1, paso 1: catálogo y auth (v0.2.01)
+
+**Tablas.** Solo las tres de tenancy y auth: `organizacion`, `workspace`
+(única por organización en v1, pero tabla propia por decisión de Sd) y
+`usuario`. `Base` lleva convención de nombres de restricciones para que los
+downgrades sean posibles. El rol es un `Enum` NO nativo de Postgres
+(VARCHAR + CHECK): agregar un rol después es una migración trivial, un enum
+nativo obliga a `ALTER TYPE`. Un CHECK garantiza que solo `plataforma` va sin
+organización. Las tablas de fuentes, tareas y versiones se posponen al paso
+que las usa, para no migrar dos veces columnas que todavía pueden cambiar.
+
+**Auth.** JWT (PyJWT, HS256) en cookie httpOnly `sesion_uboard`. La
+renovación deslizante se hace en la dependencia `usuario_actual`, que recibe
+el `Response` final y reemite la cookie (FastAPI fusiona cookies seteadas en
+dependencias; no hace falta middleware). Claves PBKDF2 stdlib como Mi
+Trabajo. Cookie `secure` salvo en entorno local. Fuera de local la app se
+niega a arrancar con el `SECRETO_SESION` de ejemplo.
+
+**Rol plataforma.** Pedido de Sd fuera de la spec: usuario en la base sin
+organización, con su API de altas (`/api/plataforma/*`). Regla E-PLAT-05
+(último admin activo) solo es alcanzable desde scripts, porque por API el
+actor es siempre un admin activo y E-PLAT-08 (no desactivarse a sí mismo)
+salta antes; queda probada a nivel `operaciones`.
+
+**Aislamiento.** `workspace_del_usuario` resuelve `/workspaces/{id}` dentro
+de la organización del usuario: ajeno = 404. Todas las rutas de datos de los
+pasos siguientes cuelgan de esa dependencia.
+
+**Tests.** 39, en 6 archivos, contra `uboard_test` migrando con Alembic
+(downgrade base + upgrade head) al inicio de la corrida y `TRUNCATE ...
+RESTART IDENTITY CASCADE` antes de cada test. `conftest.py` fuerza
+`ENTORNO=local` antes de importar la app para que la cookie no sea `secure`
+(el TestClient habla http). Pasaron a la primera.
+
+**Script.** `crear_organizacion.py` con subcomandos `plataforma`,
+`organizacion` y `demo` (idempotente; imprime las credenciales). Verificado
+corriéndolo dos veces y con un error controlado (E-PLAT-01, salida 1).

@@ -1,7 +1,101 @@
 """Tablas del catalogo. Importar este modulo registra todas en Base.metadata,
 que es lo que Alembic compara para autogenerar migraciones.
 
-Paso 1 de la fase 1: organizacion, workspace, usuario, fuente, version_modelo,
-version_spec, tarea. Todavia vacio (paso 0: esqueleto).
+Paso 1 (auth y tenancy): organizacion, workspace, usuario.
+Las tablas de fuentes, tareas y versiones de modelo/spec se agregan en los
+pasos que las usan, cada una con su migracion.
 """
-from app.catalogo.base import Base  # noqa: F401
+from __future__ import annotations
+
+import enum
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.catalogo.base import Base
+
+
+class RolUsuario(enum.StrEnum):
+    """plataforma: da de alta organizaciones y usuarios, sin organizacion propia.
+    constructor: sube fuentes y edita modelo y spec de su organizacion.
+    visualizador: ve el dashboard, filtra y pregunta; ninguna ruta de escritura."""
+
+    PLATAFORMA = "plataforma"
+    CONSTRUCTOR = "constructor"
+    VISUALIZADOR = "visualizador"
+
+
+class Organizacion(Base):
+    """Tenant logico. Todo dato de negocio cuelga de una organizacion a traves
+    de sus workspaces; los usuarios pertenecen a una sola."""
+
+    __tablename__ = "organizacion"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(120), unique=True)
+    activa: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    workspaces: Mapped[list[Workspace]] = relationship(
+        back_populates="organizacion", cascade="all, delete-orphan", order_by="Workspace.id"
+    )
+    usuarios: Mapped[list[Usuario]] = relationship(back_populates="organizacion", order_by="Usuario.id")
+
+
+class Workspace(Base):
+    """Espacio de trabajo: fuentes, modelo semantico y dashboard. En v1 cada
+    organizacion tiene uno solo (se crea con ella), pero la tabla existe para
+    que manana pueda tener varios sin migrar datos."""
+
+    __tablename__ = "workspace"
+    __table_args__ = (UniqueConstraint("organizacion_id", "nombre"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organizacion_id: Mapped[int] = mapped_column(ForeignKey("organizacion.id", ondelete="CASCADE"), index=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    organizacion: Mapped[Organizacion] = relationship(back_populates="workspaces")
+
+
+class Usuario(Base):
+    __tablename__ = "usuario"
+    __table_args__ = (
+        # El rol plataforma es el unico sin organizacion, y el unico que puede no tenerla.
+        CheckConstraint("(rol = 'plataforma') = (organizacion_id IS NULL)", name="plataforma_sin_organizacion"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organizacion_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizacion.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    # Se guarda normalizado (sin espacios, en minusculas); ver catalogo.operaciones
+    email: Mapped[str] = mapped_column(String(254), unique=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    # "sal$hash" PBKDF2-HMAC-SHA256, ver nucleo.auth
+    clave_hash: Mapped[str] = mapped_column(String(200))
+    rol: Mapped[RolUsuario] = mapped_column(
+        Enum(
+            RolUsuario,
+            name="rol_usuario",
+            native_enum=False,
+            length=20,
+            create_constraint=True,
+            values_callable=lambda enumeracion: [miembro.value for miembro in enumeracion],
+        )
+    )
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ultimo_acceso: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    organizacion: Mapped[Organizacion | None] = relationship(back_populates="usuarios")

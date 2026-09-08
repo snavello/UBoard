@@ -53,8 +53,8 @@ backend/
     main.py         # crea la app, monta /api y el frontend compilado
     version.py      # VERSION y FECHA_VERSION
     api/            # routers FastAPI (todo bajo /api)
-    nucleo/         # config (pydantic-settings), auth, errores
-    catalogo/       # tablas SQLAlchemy (tablas.py), base, sesion
+    nucleo/         # config (pydantic-settings), auth (JWT + roles), errores (codigos)
+    catalogo/       # tablas SQLAlchemy (tablas.py), base, sesion, operaciones (altas)
     ingesta/ perfilado/ inferencia/ modelo/ consultas/ asociativo/
     dashboard/ asistente/ almacen/   # según §3 de la spec (se crean por paso)
     estatico/       # build de Vite (gitignored)
@@ -115,10 +115,39 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
   `docs/fase1-lectura-y-plan.md`.
   - Paso 0 (entorno y esqueleto): HECHO 2026-09-08. Repo, venv, Node, Vite +
     React + TanStack Query, FastAPI con `/api/salud` y frontend servido,
-    Alembic configurado (sin tablas), Compose, Dockerfile, tests de salud.
-  - Pasos 1 a 8: pendientes (catálogo y auth, almacén y tareas, ingesta,
-    modelo, compilador, spec y API, frontend, integración).
+    Alembic configurado, Compose, Dockerfile, tests de salud.
+  - Paso 1 (catálogo y auth): HECHO 2026-09-08 (v0.2.01). Tablas
+    `organizacion`, `workspace`, `usuario` (migración `c2e453e92277`);
+    `/api/auth/{login,logout,yo}`; `/api/plataforma/*` (organizaciones,
+    usuarios, administradores); `/api/workspaces` con la dependencia
+    `workspace_del_usuario` que aísla organizaciones; `errores.py`;
+    `scripts/crear_organizacion.py`; 39 tests (auth, plataforma,
+    workspaces, operaciones). Sin pantallas todavía (paso 7).
+  - Pasos 2 a 8: pendientes (almacén y tareas, ingesta, modelo, compilador,
+    spec y API, frontend, integración). Las tablas `tarea`, `fuente`,
+    `version_modelo` y `version_spec` se crean en el paso que las usa, cada
+    una con su migración.
 - Fases 2, 3 y 4: no empezadas.
+
+## Accesos de la demo local
+Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
+- Plataforma: admin@uboard.local / uboard-plataforma-demo
+- Constructor de la organización Demo: constructor@demo.local / demo-constructor-1
+- Visualizador de Demo: visualizador@demo.local / demo-visualizador-1
+
+## Reglas de auth y tenancy (vigentes desde el paso 1)
+- Todo acceso a datos pasa por `workspace_del_usuario` (api/workspaces.py):
+  el workspace se busca dentro de la organización del usuario logueado;
+  uno ajeno devuelve 404, nunca 403 (no se enumeran ids).
+- Los routers de escritura exigen rol a nivel router
+  (`dependencies=[Depends(exigir_rol(...))]`), no dentro del handler.
+- Login: mismo error (E-AUTH-01) para email inexistente y clave incorrecta.
+  Usuario u organización desactivados: E-AUTH-04 / E-AUTH-05, también con
+  sesión ya abierta (se verifica en cada request).
+- Las altas viven en `catalogo/operaciones.py`; API y scripts la comparten.
+- `conftest.py` hace `alembic downgrade base` + `upgrade head` en
+  `uboard_test` al inicio de cada corrida: una migración no reversible rompe
+  los tests, a propósito.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases
@@ -136,5 +165,7 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
 - Frontend dev: `cd frontend && npm run dev` (5173, proxy a 8000).
 - Build frontend: `cd frontend && npm run build` (escribe `backend/app/estatico/`).
 - Migraciones (desde `backend/`): `alembic upgrade head` / `alembic revision --autogenerate -m "que cambia"`.
+- Datos de demo: `.venv/Scripts/python.exe backend/scripts/crear_organizacion.py demo`
+  (o `plataforma` / `organizacion` para altas puntuales; `--help`).
 - Tests (desde `backend/`): `for f in tests/test_*.py; do ../.venv/Scripts/python.exe -m pytest "$f" || break; done`
 - Todo en Docker como producción: `docker compose up --build`.

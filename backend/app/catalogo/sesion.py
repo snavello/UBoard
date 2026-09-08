@@ -22,9 +22,14 @@ def _fabrica_sesiones() -> sessionmaker[Session]:
     return sessionmaker(bind=obtener_engine(), autoflush=False, expire_on_commit=False)
 
 
+def nueva_sesion() -> Session:
+    """Sesion suelta para scripts de linea de comando. Cerrarla al terminar."""
+    return _fabrica_sesiones()()
+
+
 def obtener_sesion() -> Generator[Session, None, None]:
     """Dependencia de FastAPI: una sesion por request, cerrada al terminar."""
-    sesion = _fabrica_sesiones()()
+    sesion = nueva_sesion()
     try:
         yield sesion
     finally:
