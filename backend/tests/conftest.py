@@ -11,8 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Antes de importar la app: los tests siempre corren como entorno local
-# (cookies sin `secure`, sin exigir SECRETO_SESION real).
+# (cookies sin `secure`, sin exigir SECRETO_SESION real) y sin tocar la base
+# de trabajo al arrancar (la recuperacion de tareas huerfanas se prueba aparte).
 os.environ.setdefault("ENTORNO", "local")
+os.environ.setdefault("RECUPERAR_TAREAS_AL_ARRANCAR", "false")
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -23,12 +25,14 @@ from sqlalchemy.exc import OperationalError  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 
 import app.catalogo.tablas  # noqa: E402, F401  registra las tablas en Base.metadata
+from app.almacen import AlmacenLocal, obtener_almacen  # noqa: E402
 from app.catalogo import operaciones  # noqa: E402
 from app.catalogo.base import Base  # noqa: E402
 from app.catalogo.sesion import obtener_sesion  # noqa: E402
 from app.catalogo.tablas import Organizacion, RolUsuario, Usuario  # noqa: E402
 from app.main import app  # noqa: E402
 from app.nucleo.config import obtener_configuracion  # noqa: E402
+from app.tareas import ColaLocal, obtener_cola  # noqa: E402
 
 RAIZ_BACKEND = Path(__file__).resolve().parents[1]
 CLAVE = "clave-de-prueba-123"
@@ -57,14 +61,18 @@ def engine_test():
         os.environ.pop("ALEMBIC_DATABASE_URL", None)
 
 
+@pytest.fixture(scope="session")
+def fabrica_test(engine_test) -> sessionmaker[Session]:
+    return sessionmaker(bind=engine_test, autoflush=False, expire_on_commit=False)
+
+
 @pytest.fixture
-def sesion_db(engine_test) -> Session:
+def sesion_db(engine_test, fabrica_test) -> Session:
     """Sesion directa a la base de tests, con las tablas vacias."""
     with engine_test.begin() as conexion:
         tablas = ", ".join(f'"{tabla.name}"' for tabla in Base.metadata.sorted_tables)
         conexion.execute(text(f"TRUNCATE {tablas} RESTART IDENTITY CASCADE"))
-    fabrica = sessionmaker(bind=engine_test, autoflush=False, expire_on_commit=False)
-    sesion = fabrica()
+    sesion = fabrica_test()
     try:
         yield sesion
     finally:
@@ -72,13 +80,12 @@ def sesion_db(engine_test) -> Session:
 
 
 @pytest.fixture
-def cliente(engine_test, sesion_db) -> TestClient:
+def cliente(fabrica_test, sesion_db) -> TestClient:
     """Cliente HTTP contra la app, con la dependencia de sesion apuntando a la
     base de tests. Guarda cookies entre requests, como un navegador."""
-    fabrica = sessionmaker(bind=engine_test, autoflush=False, expire_on_commit=False)
 
     def _sesion_de_test():
-        sesion = fabrica()
+        sesion = fabrica_test()
         try:
             yield sesion
         finally:
@@ -89,7 +96,31 @@ def cliente(engine_test, sesion_db) -> TestClient:
         with TestClient(app) as cliente_http:
             yield cliente_http
     finally:
-        app.dependency_overrides.clear()
+        app.dependency_overrides.pop(obtener_sesion, None)
+
+
+@pytest.fixture
+def cola(fabrica_test) -> ColaLocal:
+    """Cola local con sesiones de la base de tests, inyectada en la app.
+    `cola.esperar(id)` bloquea hasta que la tarea termina."""
+    cola_local = ColaLocal(fabrica_sesiones=fabrica_test, hilos=1)
+    app.dependency_overrides[obtener_cola] = lambda: cola_local
+    try:
+        yield cola_local
+    finally:
+        cola_local.cerrar()
+        app.dependency_overrides.pop(obtener_cola, None)
+
+
+@pytest.fixture
+def almacen_temporal(tmp_path) -> AlmacenLocal:
+    """Almacen en un directorio temporal, inyectado en la app."""
+    almacen = AlmacenLocal(tmp_path / "almacen")
+    app.dependency_overrides[obtener_almacen] = lambda: almacen
+    try:
+        yield almacen
+    finally:
+        app.dependency_overrides.pop(obtener_almacen, None)
 
 
 @dataclass

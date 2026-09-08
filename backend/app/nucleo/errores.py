@@ -30,6 +30,11 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-PLAT-07": (400, "El email no parece válido."),
     "E-PLAT-08": (400, "No podés desactivar tu propio usuario."),
     "E-WS-01": (404, "No encontramos ese workspace."),
+    "E-ALM-01": (400, "El nombre o la ruta del archivo no es válido."),
+    "E-ALM-02": (404, "No encontramos el archivo."),
+    "E-TAREA-01": (404, "No encontramos esa tarea."),
+    "E-TAREA-02": (500, "Ese tipo de tarea no existe."),
+    "E-TAREA-03": (500, "El servidor se reinició mientras la tarea corría."),
     "E-INTERNO-00": (500, "Algo salió mal de nuestro lado. Probá de nuevo en un momento."),
 }
 

@@ -32,6 +32,12 @@ class Configuracion(BaseSettings):
     # Almacen local de archivos (Parquet y subidas)
     ruta_almacen: Path = RAIZ_PROYECTO / "datos" / "almacen"
 
+    # Cola de tareas local: hilos del ThreadPoolExecutor (1 = de a una, en orden)
+    hilos_tareas: int = 1
+    # Al arrancar, marcar como error lo que quedo pendiente/corriendo de un
+    # proceso anterior. Los tests lo apagan porque migran su propia base.
+    recuperar_tareas_al_arrancar: bool = True
+
     # local | pruebas | demo | prod
     entorno: str = "local"
 

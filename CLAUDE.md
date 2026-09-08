@@ -55,8 +55,10 @@ backend/
     api/            # routers FastAPI (todo bajo /api)
     nucleo/         # config (pydantic-settings), auth (JWT + roles), errores (codigos)
     catalogo/       # tablas SQLAlchemy (tablas.py), base, sesion, operaciones (altas)
+    almacen/        # AlmacenArchivos (base), AlmacenLocal, rutas, obtener_almacen
+    tareas/         # registro de manejadores, ColaLocal, encolar_tarea, huerfanas
     ingesta/ perfilado/ inferencia/ modelo/ consultas/ asociativo/
-    dashboard/ asistente/ almacen/   # según §3 de la spec (se crean por paso)
+    dashboard/ asistente/            # según §3 de la spec (se crean por paso)
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
   tests/            # pytest; correr por archivo
@@ -123,10 +125,16 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     `workspace_del_usuario` que aísla organizaciones; `errores.py`;
     `scripts/crear_organizacion.py`; 39 tests (auth, plataforma,
     workspaces, operaciones). Sin pantallas todavía (paso 7).
-  - Pasos 2 a 8: pendientes (almacén y tareas, ingesta, modelo, compilador,
-    spec y API, frontend, integración). Las tablas `tarea`, `fuente`,
-    `version_modelo` y `version_spec` se crean en el paso que las usa, cada
-    una con su migración.
+  - Paso 2 (almacén y tareas): HECHO 2026-09-08 (v0.3.01). `app/almacen/`
+    (interfaz `AlmacenArchivos`, `AlmacenLocal` con escritura atómica,
+    `rutas.py` con la convención `org_{id}/ws_{id}/...`, `obtener_almacen`);
+    `app/tareas/` (`registrar_tarea`, `encolar_tarea`, `ColaLocal` en hilo,
+    `marcar_tareas_huerfanas` al arrancar); tabla `tarea` (migración
+    `6f0f88df11ef`); `GET /api/workspaces/{id}/tareas[/{tarea_id}]` para el
+    polling. 33 tests nuevos (72 en total).
+  - Pasos 3 a 8: pendientes (ingesta, modelo, compilador, spec y API,
+    frontend, integración). Las tablas `fuente`, `version_modelo` y
+    `version_spec` se crean en el paso que las usa, cada una con su migración.
 - Fases 2, 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -148,6 +156,27 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - `conftest.py` hace `alembic downgrade base` + `upgrade head` en
   `uboard_test` al inicio de cada corrida: una migración no reversible rompe
   los tests, a propósito.
+
+## Reglas de almacén y tareas (vigentes desde el paso 2)
+- Nadie toca el disco directo: todo archivo pasa por `obtener_almacen()`
+  con rutas relativas validadas (`validar_ruta`: sin `..`, sin absolutas,
+  solo `[A-Za-z0-9._-]`). Los nombres de archivo subidos se pasan por
+  `nombre_seguro` antes de armar una ruta.
+- `AlmacenLocal.guardar` escribe en un temporal y hace `os.replace`: nunca
+  hay un Parquet a medias bajo el nombre final. DuckDB lee con
+  `uri_para_duckdb(ruta)`, que mañana será `s3://`.
+- Una tarea es una función decorada con `@registrar_tarea("area.accion")`
+  que recibe `(contexto, parametros)` y devuelve el dict que queda en
+  `tarea.resultado`; avisa avance con `contexto.informar(progreso, mensaje)`.
+  `encolar_tarea` crea la fila (commit) y después la manda a la cola. Los
+  endpoints reciben la cola con `Depends(obtener_cola)` y el almacén con
+  `Depends(obtener_almacen)` para que los tests los reemplacen.
+- Ninguna tarea sobrevive a un reinicio: al arrancar, lo `pendiente` o
+  `corriendo` se marca `error` (E-TAREA-03). En tests está apagado
+  (`RECUPERAR_TAREAS_AL_ARRANCAR=false`) y se prueba aparte.
+- Las excepciones dentro de una tarea no tumban el hilo: `ErrorApp` queda
+  como "E-XXX-NN: mensaje"; lo inesperado como "E-INTERNO-00 ref=..." con el
+  traceback en el log.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

@@ -2,13 +2,16 @@
 que es lo que Alembic compara para autogenerar migraciones.
 
 Paso 1 (auth y tenancy): organizacion, workspace, usuario.
-Las tablas de fuentes, tareas y versiones de modelo/spec se agregan en los
-pasos que las usan, cada una con su migracion.
+Paso 2 (cola de tareas): tarea.
+Las tablas de fuentes y versiones de modelo/spec se agregan en los pasos que
+las usan, cada una con su migracion.
 """
 from __future__ import annotations
 
 import enum
+import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -16,13 +19,29 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.catalogo.base import Base
+
+
+def _enum_por_valor(clase: type[enum.Enum], nombre: str, largo: int = 20) -> Enum:
+    """Enum guardado como VARCHAR + CHECK (no como tipo nativo de Postgres:
+    agregar un valor seria un ALTER TYPE), persistiendo el .value y no el nombre."""
+    return Enum(
+        clase,
+        name=nombre,
+        native_enum=False,
+        length=largo,
+        create_constraint=True,
+        values_callable=lambda enumeracion: [miembro.value for miembro in enumeracion],
+    )
 
 
 class RolUsuario(enum.StrEnum):
@@ -84,18 +103,46 @@ class Usuario(Base):
     nombre: Mapped[str] = mapped_column(String(120))
     # "sal$hash" PBKDF2-HMAC-SHA256, ver nucleo.auth
     clave_hash: Mapped[str] = mapped_column(String(200))
-    rol: Mapped[RolUsuario] = mapped_column(
-        Enum(
-            RolUsuario,
-            name="rol_usuario",
-            native_enum=False,
-            length=20,
-            create_constraint=True,
-            values_callable=lambda enumeracion: [miembro.value for miembro in enumeracion],
-        )
-    )
+    rol: Mapped[RolUsuario] = mapped_column(_enum_por_valor(RolUsuario, "rol_usuario"))
     activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     ultimo_acceso: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     organizacion: Mapped[Organizacion | None] = relationship(back_populates="usuarios")
+
+
+class EstadoTarea(enum.StrEnum):
+    PENDIENTE = "pendiente"
+    CORRIENDO = "corriendo"
+    TERMINADA = "terminada"
+    ERROR = "error"
+
+
+class Tarea(Base):
+    """Trabajo en segundo plano (ingesta, y mas adelante perfilado e
+    inferencia). El frontend consulta esta fila por polling. El id es un UUID
+    para que no se puedan adivinar tareas ajenas por numeracion."""
+
+    __tablename__ = "tarea"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspace.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    creada_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True)
+    # Nombre registrado del manejador, ver app.tareas.registro
+    tipo: Mapped[str] = mapped_column(String(80))
+    estado: Mapped[EstadoTarea] = mapped_column(
+        _enum_por_valor(EstadoTarea, "estado_tarea"), default=EstadoTarea.PENDIENTE
+    )
+    progreso: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    mensaje: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    parametros: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    resultado: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # "E-XXX-NN: mensaje" cuando estado == error
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    iniciada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    terminada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    workspace: Mapped[Workspace | None] = relationship()

@@ -86,3 +86,34 @@ RESTART IDENTITY CASCADE` antes de cada test. `conftest.py` fuerza
 **Script.** `crear_organizacion.py` con subcomandos `plataforma`,
 `organizacion` y `demo` (idempotente; imprime las credenciales). Verificado
 corriéndolo dos veces y con un error controlado (E-PLAT-01, salida 1).
+
+## 2026-09-08 — Fase 1, paso 2: almacén y tareas (v0.3.01)
+
+**Almacén.** Interfaz `AlmacenArchivos` con `guardar`, `abrir`, `leer`,
+`existe`, `tamanio`, `eliminar`, `listar(prefijo)` y `uri_para_duckdb`. Las
+rutas son claves relativas POSIX validadas (`validar_ruta`) y además
+`AlmacenLocal` comprueba que el destino resuelto quede dentro de la raíz:
+doble barrera contra nombres de archivo maliciosos. Escritura atómica
+(temporal + `os.replace`). `rutas.py` fija la convención
+`org_{id}/ws_{id}/fuentes/{fuente_id}.parquet` y `subidas/{fuente_id}/...`, y
+`nombre_seguro` convierte "Ñandú año (marzo).xlsx" en "Nandu_ano_marzo.xlsx".
+Un test escribe un Parquet real con DuckDB, lo guarda por el almacén y lo
+vuelve a leer con `read_parquet` desde la URI que devuelve el almacén.
+
+**Tareas.** Registro de manejadores por nombre (`@registrar_tarea`), tabla
+`tarea` con id UUID (no se adivinan ids ajenos), estado como VARCHAR + CHECK,
+`parametros`/`resultado` JSONB. `ColaLocal` es un `ThreadPoolExecutor` de 1
+hilo con su propia fábrica de sesiones (en tests se le pasa la de
+`uboard_test`; por eso `obtener_cola` es una dependencia y no un import).
+`esperar(id)` existe para tests y scripts. No se cierra el executor en el
+lifespan a propósito: los hilos no-daemon hacen que un `uvicorn` que se apaga
+espere a que la ingesta en curso termine. Sí se marcan huérfanas al arrancar.
+
+**Endpoint.** `GET /api/workspaces/{id}/tareas` y `/{tarea_id}` cuelgan de
+`workspace_del_usuario`: tarea de otro workspace = 404 `E-TAREA-01`.
+
+**Tests.** 33 nuevos (25 de almacén puros con `tmp_path`, 8 de tareas con
+Postgres). Total 72. La primera corrida de `test_tareas.py` dio
+`MemoryError` y las shells dejaron de poder hacer fork: fue presión de
+memoria del equipo (Docker Desktop + varios Python), no del código; tras
+reiniciar la sesión pasaron todos a la primera.
