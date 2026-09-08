@@ -43,6 +43,14 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-MOD-01": (422, "El modelo tiene errores. Revisá el detalle y volvé a cargarlo."),
     "E-MOD-02": (404, "Este workspace todavía no tiene un modelo cargado."),
     "E-MOD-03": (404, "No existe esa versión del modelo."),
+    "E-CONS-01": (400, "La consulta usa una métrica, entidad o campo que no está en el modelo."),
+    "E-CONS-02": (400, "No hay relación en el modelo entre las entidades que pide la consulta."),
+    "E-CONS-04": (400, "Esa combinación multiplicaría filas: la métrica no se puede desglosar por esa dimensión."),
+    "E-CONS-05": (400, "Esa granularidad de tiempo no está definida para ese campo."),
+    "E-CONS-06": (400, "El operador o el valor de un filtro no es válido para ese campo."),
+    "E-CONS-07": (400, "La consulta no es válida: tiene que pedir al menos una métrica o una dimensión."),
+    "E-CONS-08": (400, "El orden referencia una columna que la consulta no devuelve."),
+    "E-CONS-09": (500, "La consulta falló al ejecutarse."),
     "E-INTERNO-00": (500, "Algo salió mal de nuestro lado. Probá de nuevo en un momento."),
 }
 

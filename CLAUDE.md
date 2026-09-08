@@ -58,7 +58,7 @@ backend/
     almacen/        # AlmacenArchivos (base), AlmacenLocal, rutas, obtener_almacen
     tareas/         # registro de manejadores, ColaLocal, encolar_tarea, huerfanas
     ingesta/        # codificacion, encabezado, tipado, lector_csv/excel, procesador, tarea
-    consultas/      # motor.py (DuckDB por workspace); compilador en el paso 5
+    consultas/      # motor (DuckDB por workspace), esquema (ConsultaSemantica), compilador (SQL), ejecutor
     modelo/         # esquema (Pydantic), validacion (3 capas + efectivo), operaciones (versiones)
     perfilado/ inferencia/ asociativo/ dashboard/ asistente/  # se crean por paso
     estatico/       # build de Vite (gitignored)
@@ -149,8 +149,14 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     POST validar, GET versiones[/{n}]); `datos_prueba/modelo.json` escrito a
     mano para los 5 CSV, validado contra sus esquemas reales. 37 tests nuevos
     (175 en total).
-  - Pasos 5 a 8: pendientes (compilador, spec y API, frontend, integración).
-    La tabla `version_spec` se crea en el paso 6 con su migración.
+  - Paso 5 (compilador): HECHO 2026-09-08 (v0.6.01). `app/consultas/`
+    (`esquema.py` ConsultaSemantica, `compilador.py` único generador de SQL,
+    `ejecutor.py`). Camino de joins por BFS sobre el árbol, control de
+    multiplicación de filas, filtros por semi-join, cocientes, granularidad,
+    `entidad_base` para el explorador, orden, límite y desplazamiento. 36
+    tests contra los 5 CSV comparando con SQL a mano (211 en total).
+  - Pasos 6 a 8: pendientes (spec y API del dashboard, frontend,
+    integración). La tabla `version_spec` se crea en el paso 6.
 - Fases 2, 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -260,6 +266,35 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   por colección) y `resumen`. La versión actual es la de mayor `numero`.
 - **Cociente** = numerador / denominador entre ids de métricas de agregación
   (no anidados). Las expresiones aritméticas libres siguen pendientes.
+
+## Reglas del compilador (vigentes desde el paso 5)
+- **Nadie escribe SQL fuera de `consultas/compilador.py`.** KPIs, gráficos,
+  explorador, opciones de filtro y preguntas del asistente arman una
+  `ConsultaSemantica` (`metricas`, `dimensiones` con granularidad y alias,
+  `filtros`, `orden`, `limite`, `desplazamiento`, `entidad_base`) y llaman a
+  `consultar(...)`. Se compila contra el modelo **efectivo**.
+- **Cada métrica se agrega en una subconsulta que parte de SU entidad** y
+  solo hace LEFT JOIN por pasos seguros (del lado "muchos" al lado "uno") hacia
+  las entidades de las dimensiones. Si una dimensión exige un paso inseguro,
+  la combinación multiplicaría filas y se rechaza con `E-CONS-04` (ej.
+  "total_ventas por medio de pago" cuando el medio está en pagos). LEFT JOIN,
+  no INNER: los huérfanos quedan en el grupo NULL y los totales cierran.
+- **Filtros sobre entidades del lado "muchos" van como EXISTS** (semi-join):
+  "ventas que tienen algún pago en efectivo" sí es una pregunta válida.
+- **Varias entidades de métricas** = un CTE por entidad, pegados por las
+  dimensiones con `IS NOT DISTINCT FROM`; sin dimensiones, CROSS JOIN de
+  filas únicas. Con `entidad_base` (explorador), la lista de filas sale de
+  esa entidad (todas, aunque no tengan hechos) y las métricas se pegan con
+  LEFT JOIN; sin `entidad_base`, solo aparecen las combinaciones con datos.
+- **Cociente** se calcula afuera: `CAST(num AS DOUBLE) / NULLIF(den, 0)`.
+- **Valores de filtro siempre como parámetros `?`** con `CAST(? AS tipo)`
+  según `tipo_dato`; nunca literales en el SQL. Operadores: igual, distinto,
+  en, entre (extremos abiertos con null), mayor(_igual), menor(_igual),
+  contiene (ILIKE), es_nulo, no_es_nulo.
+- **Granularidad** solo sobre campos declarados en `dimensiones_tiempo` con
+  esa granularidad (`E-CONS-05`); sale como DATE del primer día del período.
+- Alias de dimensión por defecto = `"entidad.campo"`; orden por defecto =
+  dimensiones ascendentes, `NULLS LAST`.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

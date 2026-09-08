@@ -211,3 +211,46 @@ los 5 CSV ingestados, y la API lo carga de verdad en Postgres.
 
 **Tests.** 37 nuevos (31 puros de esquema/validación/efectivo/diff, 6 de
 API con los 5 CSV ingestados). Total 175.
+
+## 2026-09-08 — Fase 1, paso 5: compilador modelo → SQL (v0.6.01)
+
+**El problema que decide el diseño: la multiplicación de filas.** En el
+modelo de prueba el medio de pago cuelga de `pagos`, y una venta puede tener
+dos pagos. Un join ingenuo `ventas ⟕ pagos ⟕ medios_pago` duplica el importe
+de esas ventas y "total de ventas por medio de pago" da un número falso sin
+que nada falle. La spec pide un dashboard cuyos filtros afecten a todo, así
+que había que resolverlo bien, no evitarlo:
+- Cada relación tiene un sentido seguro (del lado "muchos" al lado "uno").
+  Cada métrica se agrega en una subconsulta que parte de su entidad y solo
+  avanza por pasos seguros hacia las dimensiones; si necesita un paso inseguro,
+  la combinación es ambigua de verdad (¿a qué medio de pago va una venta
+  pagada mitad y mitad?) y se rechaza con `E-CONS-04` y un mensaje que nombra
+  el paso.
+- Un filtro, en cambio, sí puede cruzar un paso inseguro: "ventas que tienen
+  algún pago en efectivo" está bien definido. Se compila como `EXISTS` desde
+  la primera entidad del lado "muchos", con alias `__f` internos.
+- Métricas de distintas entidades en la misma consulta (total ventas y total
+  pagado por año) van en CTEs separados y se pegan por las dimensiones con
+  `IS NOT DISTINCT FROM` sobre la unión de sus valores.
+- LEFT JOIN en vez de INNER: las ventas sin vendedor o con vendedor huérfano
+  no desaparecen del "top vendedores", quedan en el grupo NULL, y la suma de
+  los grupos cierra con el KPI. Los tests lo comprueban.
+
+**Explorador.** `entidad_base` cambia el origen de las filas: salen de esa
+entidad (todos los productos, aunque nunca hayan vendido) y las métricas se
+pegan con LEFT JOIN. Un filtro sobre otra entidad (ventas de agosto) se
+aplica también a la lista base como semi-join: quedan los productos con
+alguna venta en el período. `desplazamiento` + `limite` para paginar.
+
+**Cocientes.** Sus componentes se calculan como agregaciones ocultas en sus
+subconsultas y la división va afuera con `NULLIF(den, 0)`.
+
+**Un bug que encontraron los tests.** `entidad_base` solo se resolvía cuando
+había dimensiones; con una consulta de KPIs y una entidad base inexistente
+no fallaba. Ahora se valida siempre.
+
+**Tests.** 36, todos puros: DuckDB con las vistas de los 5 CSV y cada
+resultado comparado con SQL escrito a mano (totales que cierran, top N,
+rango de fecha, semi-join, dos entidades por la misma dimensión, explorador
+paginado, valores distintos) más 14 consultas inválidas con su código y un
+test de la forma exacta del SQL generado. Total 211.
