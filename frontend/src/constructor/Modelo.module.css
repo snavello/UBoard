@@ -1,0 +1,16 @@
+.editor { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 32px; margin-top: 24px; }
+.columnaEditor { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.texto { min-height: 420px; }
+.acciones { display: flex; gap: 10px; flex-wrap: wrap; }
+.columnaVersiones { display: flex; flex-direction: column; gap: 12px; border-left: 1px solid var(--linea); padding-left: 24px; }
+.versiones { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.version {
+  width: 100%; display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radio);
+  background: transparent; text-align: left; cursor: pointer; font-size: 13px;
+}
+.version:hover { background: var(--superficie-2); border-color: var(--linea); }
+@media (max-width: 900px) {
+  .editor { grid-template-columns: 1fr; }
+  .columnaVersiones { border-left: none; padding-left: 0; }
+}

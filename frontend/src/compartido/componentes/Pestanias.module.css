@@ -1,0 +1,11 @@
+.barra { display: flex; align-items: flex-end; gap: 4px; border-bottom: 1px solid var(--linea-fuerte); }
+.pestania {
+  padding: 10px 14px 8px;
+  border: none; border-bottom: 3px solid transparent; margin-bottom: -1px;
+  background: transparent; color: var(--tinta-2);
+  cursor: pointer; font-size: 15px;
+}
+.pestania:hover { color: var(--tinta); }
+.activa { color: var(--tinta); border-bottom-color: var(--acento); font-weight: 600; }
+.extra { margin-left: 8px; color: var(--mudo); font-size: 13px; font-weight: 400; }
+.derecha { margin-left: auto; padding-bottom: 8px; color: var(--mudo); font-size: 13px; }

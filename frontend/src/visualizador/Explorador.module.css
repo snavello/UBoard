@@ -1,0 +1,9 @@
+.explorador { display: flex; flex-direction: column; gap: 0; }
+.tablaEnvoltorio { overflow-x: auto; transition: opacity 150ms; }
+.atenuado { opacity: 0.55; }
+.ordenar {
+  border: none; background: transparent; padding: 0;
+  font: inherit; color: inherit; cursor: pointer; white-space: nowrap;
+}
+.ordenar:hover { color: var(--tinta); }
+.ordenada { color: var(--acento); }

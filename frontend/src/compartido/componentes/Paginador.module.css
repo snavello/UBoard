@@ -1,0 +1,2 @@
+.paginador { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; font-size: 13px; }
+.botones { display: flex; gap: 6px; }

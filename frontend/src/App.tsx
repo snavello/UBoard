@@ -1,35 +1,71 @@
-import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
-interface Salud {
-  estado: string;
-  version: string;
-  entorno: string;
+import { Cargando } from "./compartido/componentes/Cargando";
+import { ProveedorSesion, rutaInicial, useSesion } from "./compartido/sesion";
+import { Fuentes } from "./constructor/Fuentes";
+import { Modelo } from "./constructor/Modelo";
+import { Ingresar } from "./paginas/Ingresar";
+import { Plataforma } from "./plataforma/Plataforma";
+import type { Rol } from "./tipos";
+import { Tablero } from "./visualizador/Tablero";
+
+function Protegida({ roles, children }: { roles: Rol[]; children: ReactNode }) {
+  const { usuario, cargando } = useSesion();
+  if (cargando) return <Cargando texto="Abriendo UBoard…" />;
+  if (!usuario) return <Navigate to="/ingresar" replace />;
+  if (!roles.includes(usuario.rol)) return <Navigate to={rutaInicial(usuario)} replace />;
+  return <>{children}</>;
 }
 
-async function pedirSalud(): Promise<Salud> {
-  const respuesta = await fetch("/api/salud");
-  if (!respuesta.ok) {
-    throw new Error(`El backend respondio ${respuesta.status}`);
-  }
-  return respuesta.json();
+function Inicio() {
+  const { usuario, cargando } = useSesion();
+  if (cargando) return <Cargando texto="Abriendo UBoard…" />;
+  return <Navigate to={usuario ? rutaInicial(usuario) : "/ingresar"} replace />;
 }
 
-// Pantalla provisoria del paso 0: solo comprueba que el frontend compilado
-// llega al backend. Se reemplaza por login y dashboard en el paso 7.
 export function App() {
-  const salud = useQuery({ queryKey: ["salud"], queryFn: pedirSalud });
-
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem" }}>
-      <h1>UBoard</h1>
-      <p>Un BI que se construye solo a partir de tus archivos.</p>
-      {salud.isPending && <p>Consultando el backend...</p>}
-      {salud.isError && <p>No se pudo hablar con el backend: {salud.error.message}</p>}
-      {salud.isSuccess && (
-        <p>
-          Backend {salud.data.estado}, version {salud.data.version}, entorno {salud.data.entorno}.
-        </p>
-      )}
-    </main>
+    <ProveedorSesion>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Inicio />} />
+          <Route path="/ingresar" element={<Ingresar />} />
+          <Route
+            path="/tablero"
+            element={
+              <Protegida roles={["constructor", "visualizador"]}>
+                <Tablero />
+              </Protegida>
+            }
+          />
+          <Route
+            path="/fuentes"
+            element={
+              <Protegida roles={["constructor"]}>
+                <Fuentes />
+              </Protegida>
+            }
+          />
+          <Route
+            path="/modelo"
+            element={
+              <Protegida roles={["constructor"]}>
+                <Modelo />
+              </Protegida>
+            }
+          />
+          <Route
+            path="/plataforma"
+            element={
+              <Protegida roles={["plataforma"]}>
+                <Plataforma />
+              </Protegida>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ProveedorSesion>
   );
 }

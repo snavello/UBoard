@@ -1,0 +1,82 @@
+@import "./tokens.css";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #raiz { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: var(--fuente-texto);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3 { margin: 0; font-family: var(--fuente-titulo); font-weight: 500; line-height: 1.1; text-wrap: balance; }
+h1 { font-size: 40px; }
+h2 { font-size: 24px; }
+h3 { font-size: 20px; }
+p { margin: 0; }
+a { color: var(--acento); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* Utilidades chicas y compartidas (todo lo demás va en CSS Modules) */
+.cifra { font-variant-numeric: tabular-nums; }
+.mudo { color: var(--mudo); }
+.secundario { color: var(--tinta-2); }
+.kicker { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tinta-2); }
+.visualmente-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.boton {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 40px; padding: 8px 16px;
+  border: 1px solid var(--linea-fuerte); border-radius: var(--radio);
+  background: var(--superficie); color: var(--tinta);
+  cursor: pointer;
+}
+.boton:hover { background: var(--superficie-2); }
+.boton:focus-visible, .campo:focus-visible, a:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.boton:disabled { opacity: 0.5; cursor: default; }
+.boton--primario { background: var(--acento); border-color: var(--acento); color: var(--acento-tinta); }
+.boton--primario:hover { filter: brightness(1.08); background: var(--acento); }
+.boton--peligro { color: var(--peligro); border-color: var(--peligro); }
+.boton--peligro:hover { background: var(--peligro-suave); }
+.boton--chico { min-height: 32px; padding: 4px 12px; font-size: 14px; }
+.boton--texto { border-color: transparent; background: transparent; color: var(--acento); padding-inline: 8px; }
+.boton--texto:hover { background: var(--acento-suave); }
+
+.campo {
+  width: 100%; min-height: 40px; padding: 8px 12px;
+  border: 1px solid var(--linea); border-radius: var(--radio);
+  background: var(--superficie); color: var(--tinta);
+}
+.campo:focus { border-color: var(--acento); outline: none; }
+textarea.campo { font-family: var(--fuente-mono); font-size: 13px; line-height: 1.5; resize: vertical; }
+label.etiqueta { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--tinta-2); }
+
+.tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabla th, .tabla td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--linea); vertical-align: top; }
+.tabla th { font-weight: 600; font-size: 13px; color: var(--tinta-2); border-bottom-color: var(--linea-fuerte); white-space: nowrap; }
+.tabla td.numero, .tabla th.numero { text-align: right; font-variant-numeric: tabular-nums; }
+.tabla tbody tr:hover { background: var(--superficie-2); }
+
+.pastilla {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px; border-radius: var(--radio-pastilla);
+  background: var(--superficie-2); color: var(--tinta-2); font-size: 13px; white-space: nowrap;
+}
+.pastilla--acento { background: var(--acento-suave); color: var(--acento); }
+.pastilla--exito { background: #e6f3e6; color: var(--exito); }
+.pastilla--peligro { background: var(--peligro-suave); color: var(--peligro); }
+.pastilla--advertencia { background: #fbf1d9; color: var(--advertencia); }
+
+.codigo { font-family: var(--fuente-mono); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

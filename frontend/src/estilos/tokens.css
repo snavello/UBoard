@@ -1,0 +1,59 @@
+/* Sistema de diseño de UBoard: dirección "informe editorial".
+   Un solo lugar para colores, tipografía y medidas. Los gráficos leen estas
+   variables en tiempo de ejecución (compartido/tema.ts); la paleta de series
+   vive en compartido/paleta.ts porque ECharts necesita hex literales. */
+:root {
+  color-scheme: light dark;
+
+  --papel: #fdfcf9;            /* fondo de página, blanco cálido */
+  --superficie: #ffffff;       /* tarjetas, popovers */
+  --superficie-2: #f4f1ea;     /* zonas hundidas, filas alternas */
+  --tinta: #1c1a17;
+  --tinta-2: #52514e;
+  --mudo: #898781;
+  --linea: #e6e2d9;            /* hairline */
+  --linea-fuerte: #1c1a17;     /* la regla gruesa del encabezado */
+  --acento: #4a3aa7;           /* violeta profundo: acción y selección */
+  --acento-tinta: #ffffff;
+  --acento-suave: #ece9f7;
+  --exito: #006300;
+  --advertencia: #8a6400;
+  --peligro: #b3261e;
+  --peligro-suave: #fbe9e7;
+
+  --grilla: #e1e0d9;           /* líneas de grilla de los gráficos */
+  --eje: #c3c2b7;
+
+  --fuente-texto: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --fuente-titulo: "Newsreader", Georgia, "Times New Roman", serif;
+  --fuente-mono: ui-monospace, Consolas, "Courier New", monospace;
+
+  --radio: 6px;
+  --radio-pastilla: 999px;
+  --ancho-max: 1440px;
+  --margen: clamp(16px, 5vw, 72px);
+  --sombra: 0 8px 24px rgba(28, 26, 23, 0.10);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papel: #14130f;
+    --superficie: #1d1c18;
+    --superficie-2: #26251f;
+    --tinta: #f3f0e8;
+    --tinta-2: #c3c2b7;
+    --mudo: #8d8a80;
+    --linea: #33312b;
+    --linea-fuerte: #f3f0e8;
+    --acento: #9085e9;
+    --acento-tinta: #14130f;
+    --acento-suave: #2a2740;
+    --exito: #4caf50;
+    --advertencia: #d9a400;
+    --peligro: #f28b82;
+    --peligro-suave: #3a201d;
+    --grilla: #2c2c2a;
+    --eje: #383835;
+    --sombra: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+}

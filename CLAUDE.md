@@ -66,7 +66,15 @@ backend/
   alembic/          # migraciones; env.py toma la URL de la config de la app
   tests/            # pytest; correr por archivo
   scripts/          # CLIs (crear_organizacion.py, cargar_prueba.py, ...)
-frontend/src/       # constructor/ visualizador/ compartido/
+frontend/src/
+  main.tsx App.tsx  # QueryClient, rutas por rol (Protegida), redirecciones
+  tipos.ts          # espejo de los esquemas de la API
+  estilos/          # tokens.css (colores claro/oscuro, tipografía, medidas), base.css
+  compartido/       # api.ts (pedir, ErrorApi, 401 -> evento), sesion.tsx, formato.ts (es-AR),
+                    # paleta.ts, tema.ts, filtrosUrl.ts, componentes/ (Marco, Aviso, Cargando,
+                    # Pestanias, Paginador), graficos/ (useGrafico, opciones ECharts)
+  paginas/Ingresar  visualizador/ (Tablero, Filtros, Kpis, Grafico, Explorador)
+  constructor/ (Fuentes, Modelo)  plataforma/ (Plataforma)
 docker/             # postgres-init.sql (crea uboard_test), entrypoint.sh
 datos_prueba/       # los 5 CSV + modelo.json + spec.json
 docs/               # especificación, planes
@@ -165,7 +173,16 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     `?filtros=`); `datos_prueba/spec.json`; `scripts/cargar_prueba.py`
     (carga de punta a punta contra un servidor). 26 tests nuevos (237 en
     total). **El backend de la fase 1 está completo.**
-  - Pasos 7 (frontend) y 8 (integración y aceptación): pendientes.
+  - Paso 7 (frontend): HECHO 2026-09-08 (v0.8.01). Dirección elegida por Sd
+    entre tres propuestas (lienzo `docs/disenos/propuestas-dashboard/`):
+    **informe editorial con la planilla de detalle debajo**. `frontend/src/`:
+    `estilos/` (tokens + base), `compartido/` (api, sesión, formato es-AR,
+    paleta validada, tema, filtros en URL, componentes, `graficos/` con
+    ECharts directo), `paginas/Ingresar`, `visualizador/` (Tablero, Filtros,
+    Kpis, Grafico, Explorador), `constructor/` (Fuentes, Modelo con editor
+    JSON de modelo y spec), `plataforma/`. Verificado en el navegador contra
+    el backend real. 7 tests de vitest (formato y filtros en URL).
+  - Paso 8 (integración y aceptación): pendiente.
 - Fases 2, 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -331,6 +348,43 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - Los valores salen crudos (números, fechas ISO); el frontend formatea con
   locale es-AR según `formato` (moneda, entero, decimal, porcentaje).
 
+## Reglas del frontend (vigentes desde el paso 7)
+- **Dirección visual: informe editorial** (elegida por Sd). Cabecera con
+  regla gruesa, título en Newsreader (serif) y cuerpo en Source Sans 3;
+  papel blanco cálido, acento violeta `--acento`; cifra protagonista grande
+  (el primer KPI del spec) y el resto como cifras chicas; gráficos en orden
+  de lectura (el primero a lo ancho, el resto en grilla de 2); la planilla de
+  detalle (explorador) a lo ancho, debajo. Tokens en `estilos/tokens.css`,
+  con modo oscuro por `prefers-color-scheme`. Sin Tailwind, sin librería de
+  componentes; CSS Modules por componente y utilidades mínimas en `base.css`.
+- **Gráficos con las reglas de dataviz**: ECharts directo (`echarts/core`,
+  solo los módulos usados); una sola serie sin leyenda, en `--acento`;
+  torta como dona con leyenda y la paleta de series validada
+  (`compartido/paleta.ts`, orden fijo, no reordenar); barras ≤ 24 px con
+  punta redondeada, horizontales para categorías y verticales para fechas;
+  líneas de 2 px con área al 10 %; grilla hairline; textos siempre en tonos
+  de tinta; tooltip con el formato de la métrica; "Ver tabla" en cada
+  gráfico. El tema se lee de las variables CSS (`tema.ts`).
+- **Formato es-AR en `formato.ts`**: moneda sin decimales desde $ 10.000,
+  compacto en ejes (`$ 48,3 M`), fechas `dd/mm/aaaa`, períodos `ene 2026` /
+  `T1 2026` / `2026`. Los valores nulos se muestran como `—` y el grupo NULL
+  de un gráfico como `(sin dato)`.
+- **Filtros activos en la URL** (`?filtros=<JSON>`, `filtrosUrl.ts`), mismo
+  JSON que consume la API: clave de caché de TanStack Query y link
+  compartible. Los chips abren un popover (lista con búsqueda y checkboxes,
+  o rango con dos fechas y atajos) y aplican al instante.
+- **Sesión**: `pedir()` manda `credentials: same-origin`; un 401 dispara el
+  evento `uboard:sesion-vencida` y `ProveedorSesion` deja al usuario en null
+  (las rutas protegidas redirigen a `/ingresar`). Al iniciar o cerrar sesión
+  se descartan todas las consultas cacheadas MENOS `["yo"]`: un `clear()`
+  deja al observador de `useQuery` apuntando a una consulta muerta.
+- **Constructor mínimo**: Fuentes (subida múltiple con polling de tareas,
+  esquema por fuente, muestra, borrar) y Modelo (editor JSON con Validar /
+  Guardar versión / cargar archivo, para el modelo y para el spec, con lista
+  de versiones). Lo reemplazan el wizard (fase 2) y el chat (fase 3).
+- Google Fonts se carga por `<link>` en `index.html` con fallbacks
+  (Georgia, Segoe UI). Pendiente vendorear las fuentes antes de producción.
+
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases
   secuenciales; dentro de cada fase, pasos chicos verificados de verdad.
@@ -354,4 +408,5 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - Cargar todo en un servidor corriendo (CSV + modelo + spec, como el constructor
   de la demo): `.venv/Scripts/python.exe backend/scripts/cargar_prueba.py [--url http://localhost:8000]`.
 - Tests (desde `backend/`): `for f in tests/test_*.py; do ../.venv/Scripts/python.exe -m pytest "$f" || break; done`
+- Tests del frontend: `cd frontend && npx vitest run` (y `npm run build` corre `tsc -b`).
 - Todo en Docker como producción: `docker compose up --build`.

@@ -1,0 +1,19 @@
+.kpis { display: flex; flex-direction: column; gap: 22px; transition: opacity 150ms; }
+.atenuado { opacity: 0.55; }
+.protagonista { display: flex; flex-direction: column; gap: 6px; }
+.etiqueta { font-size: 13px; color: var(--tinta-2); }
+.cifraGrande {
+  font-family: var(--fuente-titulo);
+  /* Escala con el ancho para que "$ 48.320.028" quede en UNA linea en la columna de 4/12 */
+  font-size: clamp(36px, 3.6vw, 64px);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.grilla {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px;
+  margin: 0; padding-top: 18px; border-top: 1px solid var(--linea);
+}
+.kpi { display: flex; flex-direction: column; gap: 2px; }
+.kpi dd { margin: 0; }
+.cifra { font-family: var(--fuente-titulo); font-size: 30px; line-height: 1.1; overflow-wrap: anywhere; }

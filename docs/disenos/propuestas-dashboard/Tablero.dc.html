@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; color: #17202a; }
+    a { color: #2a78d6; } a:hover { color: #1c5cab; }
+    .mono { font-family: "IBM Plex Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #f3f4f6; display: flex; flex-direction: column; overflow: hidden;">
+  <div style="height: 52px; background: #ffffff; border-bottom: 1px solid #e1e4e8; display: flex; align-items: center; padding: 0 20px; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 26px; height: 26px; border-radius: 6px; background: #2a78d6;"></div>
+      <span style="font-weight: 600; font-size: 15px;">UBoard</span>
+      <span style="color: #8a919c; font-size: 13px;">Demo · Ventas del almacén</span>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; gap: 4px; font-size: 13px;">
+      <span style="padding: 6px 12px; border-radius: 6px; background: #e8f0fb; color: #1c5cab; font-weight: 500;">Tablero</span>
+      <span style="padding: 6px 12px; color: #4b5563;">Fuentes</span>
+      <span style="padding: 6px 12px; color: #4b5563;">Modelo</span>
+    </div>
+    <span style="font-size: 13px; color: #4b5563; margin-left: 12px;">Constructora Demo</span>
+  </div>
+
+  <div style="flex: 1; display: flex; min-height: 0;">
+    <div style="width: 248px; background: #ffffff; border-right: 1px solid #e1e4e8; padding: 18px 16px; display: flex; flex-direction: column; gap: 16px; font-size: 13px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <span style="font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #6b7280;">Filtros</span>
+        <span style="color: #2a78d6; font-size: 12px;">Limpiar</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="color: #4b5563;">Período</span>
+        <div style="border: 1px solid #d5d9df; border-radius: 6px; padding: 8px 10px; background: #fff; display: flex; justify-content: space-between;"><span>01/01/2026</span><span style="color: #9aa1ab;">→</span><span>30/06/2026</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="color: #4b5563;">Sucursal</span>
+        <div style="border: 1px solid #d5d9df; border-radius: 6px; padding: 8px 10px; background: #fff; display: flex; gap: 6px; flex-wrap: wrap;">
+          <span style="background: #e8f0fb; color: #1c5cab; border-radius: 4px; padding: 2px 8px;">Centro ×</span>
+          <span style="color: #9aa1ab;">Elegí…</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="color: #4b5563;">Vendedor</span>
+        <div style="border: 1px solid #d5d9df; border-radius: 6px; padding: 8px 10px; background: #fff; color: #9aa1ab;">Todos</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="color: #4b5563;">Categoría</span>
+        <div style="border: 1px solid #d5d9df; border-radius: 6px; padding: 8px 10px; background: #fff; color: #9aa1ab;">Todas</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="color: #4b5563;">Medio de pago</span>
+        <div style="border: 1px solid #d5d9df; border-radius: 6px; padding: 8px 10px; background: #fff; color: #9aa1ab;">Todos</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="font-size: 12px; color: #8a919c; border-top: 1px solid #e1e4e8; padding-top: 12px;">2 filtros activos · 1.418 ventas</div>
+    </div>
+
+    <div style="flex: 1; padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0;">
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;">
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px; color: #6b7280;">Total ventas</span>
+          <span class="mono" style="font-size: 26px; font-weight: 500;">$ 22.914.310</span>
+        </div>
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px; color: #6b7280;">Cantidad de ventas</span>
+          <span class="mono" style="font-size: 26px; font-weight: 500;">1.418</span>
+        </div>
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px; color: #6b7280;">Ticket promedio</span>
+          <span class="mono" style="font-size: 26px; font-weight: 500;">$ 16.160</span>
+        </div>
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px; color: #6b7280;">Unidades vendidas</span>
+          <span class="mono" style="font-size: 26px; font-weight: 500;">5.037</span>
+        </div>
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px; color: #6b7280;">Total pagado</span>
+          <span class="mono" style="font-size: 26px; font-weight: 500;">$ 22.914.310</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; flex: 1; min-height: 0;">
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 13px; font-weight: 600;">Ventas por mes</span>
+          <svg viewBox="0 0 520 170" style="width: 100%; height: 100%;" preserveAspectRatio="none">
+            <line x1="0" y1="40" x2="520" y2="40" stroke="#e1e0d9" stroke-width="1"></line>
+            <line x1="0" y1="85" x2="520" y2="85" stroke="#e1e0d9" stroke-width="1"></line>
+            <line x1="0" y1="130" x2="520" y2="130" stroke="#e1e0d9" stroke-width="1"></line>
+            <polyline points="10,120 95,100 180,110 265,70 350,80 435,45 510,60" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+            <circle cx="510" cy="60" r="4" fill="#2a78d6" stroke="#fff" stroke-width="2"></circle>
+          </svg>
+        </div>
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 13px; font-weight: 600;">Top vendedores</span>
+          <svg viewBox="0 0 520 170" style="width: 100%; height: 100%;" preserveAspectRatio="none">
+            <rect x="120" y="8" width="380" height="18" rx="4" fill="#2a78d6"></rect>
+            <rect x="120" y="36" width="330" height="18" rx="4" fill="#2a78d6"></rect>
+            <rect x="120" y="64" width="290" height="18" rx="4" fill="#2a78d6"></rect>
+            <rect x="120" y="92" width="240" height="18" rx="4" fill="#2a78d6"></rect>
+            <rect x="120" y="120" width="180" height="18" rx="4" fill="#2a78d6"></rect>
+            <text x="0" y="22" font-size="12" fill="#52514e" font-family="IBM Plex Sans, sans-serif">María Pérez</text>
+            <text x="0" y="50" font-size="12" fill="#52514e" font-family="IBM Plex Sans, sans-serif">Nicolás Álvarez</text>
+            <text x="0" y="78" font-size="12" fill="#52514e" font-family="IBM Plex Sans, sans-serif">Juan Gómez</text>
+            <text x="0" y="106" font-size="12" fill="#52514e" font-family="IBM Plex Sans, sans-serif">Sofía Díaz</text>
+            <text x="0" y="134" font-size="12" fill="#52514e" font-family="IBM Plex Sans, sans-serif">(sin vendedor)</text>
+          </svg>
+        </div>
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 13px; font-weight: 600;">Ventas por categoría</span>
+          <svg viewBox="0 0 520 170" style="width: 100%; height: 100%;" preserveAspectRatio="none">
+            <line x1="0" y1="150" x2="520" y2="150" stroke="#c3c2b7" stroke-width="1"></line>
+            <rect x="30" y="30" width="24" height="120" rx="4" fill="#2a78d6"></rect>
+            <rect x="110" y="60" width="24" height="90" rx="4" fill="#2a78d6"></rect>
+            <rect x="190" y="75" width="24" height="75" rx="4" fill="#2a78d6"></rect>
+            <rect x="270" y="95" width="24" height="55" rx="4" fill="#2a78d6"></rect>
+            <rect x="350" y="105" width="24" height="45" rx="4" fill="#2a78d6"></rect>
+            <rect x="430" y="125" width="24" height="25" rx="4" fill="#2a78d6"></rect>
+          </svg>
+        </div>
+        <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 13px; font-weight: 600;">Cobros por medio de pago</span>
+          <div style="display: flex; gap: 20px; align-items: center; flex: 1;">
+            <svg viewBox="0 0 120 120" style="width: 130px; height: 130px;">
+              <circle cx="60" cy="60" r="44" fill="none" stroke="#2a78d6" stroke-width="18" stroke-dasharray="83 276"></circle>
+              <circle cx="60" cy="60" r="44" fill="none" stroke="#eb6834" stroke-width="18" stroke-dasharray="69 276" stroke-dashoffset="-85"></circle>
+              <circle cx="60" cy="60" r="44" fill="none" stroke="#1baf7a" stroke-width="18" stroke-dasharray="55 276" stroke-dashoffset="-156"></circle>
+              <circle cx="60" cy="60" r="44" fill="none" stroke="#eda100" stroke-width="18" stroke-dasharray="33 276" stroke-dashoffset="-213"></circle>
+              <circle cx="60" cy="60" r="44" fill="none" stroke="#e87ba4" stroke-width="18" stroke-dasharray="20 276" stroke-dashoffset="-248"></circle>
+            </svg>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #4b5563;">
+              <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #2a78d6;"></span>Efectivo</div>
+              <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #eb6834;"></span>Tarjeta de débito</div>
+              <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #1baf7a;"></span>Tarjeta de crédito</div>
+              <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #eda100;"></span>Transferencia</div>
+              <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #e87ba4;"></span>Mercado Pago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 0 16px 12px; display: flex; flex-direction: column; gap: 0; height: 190px;">
+        <div style="display: flex; gap: 22px; font-size: 13px; border-bottom: 1px solid #e1e4e8;">
+          <span style="padding: 12px 0 10px; border-bottom: 2px solid #2a78d6; color: #1c5cab; font-weight: 500;">Productos</span>
+          <span style="padding: 12px 0 10px; color: #6b7280;">Vendedores</span>
+          <span style="padding: 12px 0 10px; color: #6b7280;">Ventas</span>
+          <span style="padding: 12px 0 10px; color: #6b7280;">Pagos</span>
+          <span style="flex: 1;"></span>
+          <span style="padding: 12px 0 10px; color: #8a919c; font-size: 12px;">40 productos · página 1 de 2</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 0 12px; font-size: 12px; color: #6b7280; padding: 8px 0 6px; border-bottom: 1px solid #eef0f2;">
+          <span>Producto</span><span>Categoría</span><span style="text-align: right;">Precio de lista</span><span style="text-align: right;">Total ventas</span><span style="text-align: right;">Unidades</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 0 12px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid #f1f2f4;">
+          <span>Fernet Branca 750ml</span><span style="color: #4b5563;">Bebidas</span><span class="mono" style="text-align: right;">14.500,00</span><span class="mono" style="text-align: right;">3.212.900,00</span><span class="mono" style="text-align: right;">221</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 0 12px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid #f1f2f4;">
+          <span>Queso Sardo x kg</span><span style="color: #4b5563;">Fiambrería</span><span class="mono" style="text-align: right;">17.600,00</span><span class="mono" style="text-align: right;">2.980.400,00</span><span class="mono" style="text-align: right;">169</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 0 12px; font-size: 13px; padding: 7px 0;">
+          <span>Salame Milán x kg</span><span style="color: #4b5563;">Fiambrería</span><span class="mono" style="text-align: right;">15.400,00</span><span class="mono" style="text-align: right;">2.771.200,00</span><span class="mono" style="text-align: right;">180</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

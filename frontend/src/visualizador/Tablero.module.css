@@ -1,0 +1,17 @@
+.cuerpo {
+  display: grid;
+  grid-template-columns: minmax(280px, 4fr) 8fr;
+  gap: 32px 40px;
+  margin-top: 8px;
+}
+.columnaCifras { display: flex; flex-direction: column; gap: 26px; }
+.columnaGraficos { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+.grilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; }
+
+.detalle { margin-top: 44px; border-top: 1px solid var(--linea-fuerte); padding-top: 18px; display: flex; flex-direction: column; gap: 14px; }
+.detalleCabecera { display: flex; flex-direction: column; gap: 4px; }
+
+@media (max-width: 960px) {
+  .cuerpo { grid-template-columns: 1fr; }
+  .grilla { grid-template-columns: 1fr; }
+}

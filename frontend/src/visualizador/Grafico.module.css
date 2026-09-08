@@ -1,0 +1,7 @@
+.grafico { margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; transition: opacity 150ms; }
+.atenuado { opacity: 0.55; }
+.cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.titulo { font-size: 20px; }
+.lienzo { width: 100%; }
+.vacio { display: grid; place-items: center; border: 1px dashed var(--linea); border-radius: var(--radio); }
+.tablaEnvoltorio { overflow: auto; border: 1px solid var(--linea); border-radius: var(--radio); }

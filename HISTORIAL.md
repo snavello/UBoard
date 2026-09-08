@@ -292,3 +292,57 @@ filtros que afectan a todo incluido el total del explorador, opciones,
 paginado y orden, errores, spec inválido, advertencias cuando cambia el
 modelo, roles y aislamiento). Total 237. Con esto el backend de la fase 1
 está completo: falta el frontend (paso 7) y la aceptación (paso 8).
+
+## 2026-09-08 — Fase 1, paso 7: frontend (v0.8.01)
+
+**Elección de dirección.** Con el skill `design` se armó un lienzo con tres
+bocetos del dashboard usando los paneles y datos reales del spec de prueba:
+A "Tablero de control" (denso, barra lateral de filtros, grilla 2×2), B
+"Informe editorial" (aireado, serif, cifra protagonista, gráficos en orden de
+lectura, filtros como chips) y C "Planilla con tablero" (la tabla siempre a
+la vista). Sd eligió **B con la planilla de detalle a lo ancho debajo**. Los
+bocetos quedan en `docs/disenos/propuestas-dashboard/` (los `.dc.html` y el
+`canvas.json`; el lienzo publicado es un artefacto de Claude, no se
+commitea).
+
+**Paleta.** Antes de dibujar nada se corrió `validate_palette.js` del skill
+dataviz sobre las tres superficies candidatas y la oscura: la paleta de
+referencia de 8 series pasa todos los controles duros (banda de luminosidad,
+separación para daltonismo, piso de visión normal) en las cuatro; los
+avisos de contraste (< 3:1 en amarillo, aqua y magenta sobre claro) se
+resuelven con leyenda + tooltip + "Ver tabla", como pide el skill. Las
+series únicas (línea, barras) usan el acento del sistema, no el slot 1, para
+que gráfico y UI sean de la misma familia.
+
+**Arquitectura del frontend.** Sin wrapper de ECharts: un hook `useGrafico`
+con `echarts/core` y solo los módulos usados (aun así el bundle es de 864 KB;
+partirlo con `import()` queda para más adelante). El tema de los gráficos se
+lee de las variables CSS en tiempo de ejecución, así el modo oscuro del SO
+los cambia sin duplicar tokens. Los filtros activos viven en la URL con el
+mismo JSON que consume la API. Las páginas del constructor son mínimas a
+propósito (Fuentes y un editor JSON para modelo y spec): las reemplazan el
+wizard y el chat.
+
+**Bug encontrado probando en el navegador.** Tras un login exitoso la app
+volvía al formulario vacío. `iniciar()` hacía `queryClient.clear()` antes de
+`setQueryData(["yo"], usuario)`: `clear()` borra la consulta a la que el
+`useQuery` de `ProveedorSesion` está suscripto, el observador queda apuntando
+a una consulta muerta y sigue viendo `null`; la ruta protegida redirige a
+`/ingresar`, que se vuelve a montar con el estado en blanco. Se reemplazó por
+`removeQueries` con un predicado que deja `["yo"]` intacta. Segundo ajuste:
+la cifra protagonista ("$ 48.320.028" a 72 px) no entraba en la columna de
+4/12 a 1280 px y partía el "$" en otra línea: `clamp(36px, 3.6vw, 64px)` +
+`white-space: nowrap`.
+
+**Verificado en el navegador** contra uvicorn + Postgres con la organización
+Demo: login, cabecera con el título del spec, los 5 KPIs con formato es-AR,
+los 4 gráficos (línea con área, barras horizontales con etiquetas, barras por
+categoría con el grupo "(sin dato)", dona con leyenda), el explorador con
+las 40 filas de productos. Sin errores de consola salvo el 401 esperado de
+`/api/auth/yo` antes de ingresar.
+
+**Incidente de entorno.** Al retomar la sesión, Docker Desktop no levantaba
+el motor (`wsl -l -v` mostraba `docker-desktop Stopped` y `docker info`
+colgaba); hizo falta matar sus procesos, `wsl --shutdown` y relanzarlo.
+Además un uvicorn lanzado con `&` desde el Bash de Claude no sobrevive al
+final de la llamada en esta sesión: usar `run_in_background`.

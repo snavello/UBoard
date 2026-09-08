@@ -1,0 +1,11 @@
+{
+  "artboards": [
+    { "file": "Tablero.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "A · Tablero de control" },
+    { "file": "Editorial.dc.html", "x": 1560, "y": 0, "w": 1440, "h": 900, "title": "B · Informe editorial" },
+    { "file": "Planilla.dc.html", "x": 3120, "y": 0, "w": 1440, "h": 900, "title": "C · Planilla con tablero" }
+  ],
+  "annotations": [
+    { "id": "como-elegir", "x": 0, "y": -260, "w": 720, "text": "Tres direcciones para el dashboard de UBoard, con los datos y paneles reales del spec de prueba. Son bocetos para elegir una dirección, no el diseño final.\n\nA · Tablero de control: denso, filtros en una barra lateral siempre visible, KPIs arriba y grilla 2x2 de gráficos. Lo que espera quien viene de Tableau o Power BI. Riesgo: se parece a cualquier BI.\n\nB · Informe editorial: aireado, tipografía serif, un número protagonista y los gráficos en orden de lectura, filtros como chips arriba. Se lee como un informe. Riesgo: menos denso, con muchos gráficos hay que scrollear.\n\nC · Planilla con tablero: el explorador (la tabla) siempre a la vista a la derecha, KPIs como cinta y filtros como barra de herramientas. Para quien vive en Excel y quiere ver las filas. Riesgo: gráficos más chicos.\n\nEn las tres: misma paleta de series validada para daltonismo, números con cifras tabulares, filtros que afectan a todo." }
+  ],
+  "launch": { "view": "canvas" }
+}

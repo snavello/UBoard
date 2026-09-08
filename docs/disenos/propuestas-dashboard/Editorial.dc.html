@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Source+Sans+3:wght@400;600&display=swap">
+  <style>
+    body { margin: 0; font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif; color: #1c1a17; }
+    a { color: #4a3aa7; } a:hover { color: #372a80; }
+    .serif { font-family: "Newsreader", Georgia, "Times New Roman", serif; }
+    .num { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #fdfcf9; display: flex; flex-direction: column; overflow: hidden;">
+  <div style="padding: 22px 72px 0; display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid #1c1a17;">
+    <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 14px;">
+      <span style="font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #6f6a62;">UBoard · Demo</span>
+      <span class="serif" style="font-size: 40px; font-weight: 500; line-height: 1.05;">Ventas del almacén</span>
+    </div>
+    <div style="display: flex; gap: 28px; font-size: 14px; padding-bottom: 18px;">
+      <span style="border-bottom: 2px solid #4a3aa7; padding-bottom: 4px;">Tablero</span>
+      <span style="color: #6f6a62;">Fuentes</span>
+      <span style="color: #6f6a62;">Modelo</span>
+      <span style="color: #6f6a62;">Constructora Demo</span>
+    </div>
+  </div>
+
+  <div style="padding: 14px 72px; display: flex; gap: 10px; align-items: center; font-size: 14px; border-bottom: 1px solid #e6e2d9;">
+    <span style="color: #6f6a62; margin-right: 6px;">Mostrando</span>
+    <span style="border: 1px solid #1c1a17; border-radius: 999px; padding: 6px 14px; background: #1c1a17; color: #fdfcf9;">1 ene – 30 jun 2026</span>
+    <span style="border: 1px solid #1c1a17; border-radius: 999px; padding: 6px 14px; background: #1c1a17; color: #fdfcf9;">Sucursal Centro ×</span>
+    <span style="border: 1px solid #cfc9be; border-radius: 999px; padding: 6px 14px; color: #6f6a62;">Vendedor</span>
+    <span style="border: 1px solid #cfc9be; border-radius: 999px; padding: 6px 14px; color: #6f6a62;">Categoría</span>
+    <span style="border: 1px solid #cfc9be; border-radius: 999px; padding: 6px 14px; color: #6f6a62;">Medio de pago</span>
+    <span style="flex: 1;"></span>
+    <span style="color: #4a3aa7;">Quitar filtros</span>
+  </div>
+
+  <div style="flex: 1; padding: 28px 72px 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 0 32px; min-height: 0;">
+    <div style="grid-column: span 4; display: flex; flex-direction: column; gap: 26px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 13px; color: #6f6a62;">Total ventas del período</span>
+        <span class="serif num" style="font-size: 72px; line-height: 1; font-weight: 400;">$ 22.914.310</span>
+        <span style="font-size: 14px; color: #6f6a62; margin-top: 6px;">1.418 ventas · ticket promedio $ 16.160</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; border-top: 1px solid #e6e2d9; padding-top: 18px;">
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 12px; color: #6f6a62;">Unidades vendidas</span><span class="serif num" style="font-size: 30px;">5.037</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 12px; color: #6f6a62;">Total pagado</span><span class="serif num" style="font-size: 30px;">$ 22.914.310</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #e6e2d9; padding-top: 18px;">
+        <span class="serif" style="font-size: 20px;">Cobros por medio de pago</span>
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+          <div style="display: flex; align-items: center; gap: 10px;"><span style="width: 150px; color: #52514e;">Efectivo</span><span style="flex: 1; height: 10px; background: #efece5; border-radius: 4px; overflow: hidden;"><span style="display: block; width: 32%; height: 100%; background: #4a3aa7;"></span></span><span class="num" style="width: 40px; text-align: right;">32 %</span></div>
+          <div style="display: flex; align-items: center; gap: 10px;"><span style="width: 150px; color: #52514e;">Tarjeta de débito</span><span style="flex: 1; height: 10px; background: #efece5; border-radius: 4px; overflow: hidden;"><span style="display: block; width: 26%; height: 100%; background: #4a3aa7;"></span></span><span class="num" style="width: 40px; text-align: right;">26 %</span></div>
+          <div style="display: flex; align-items: center; gap: 10px;"><span style="width: 150px; color: #52514e;">Tarjeta de crédito</span><span style="flex: 1; height: 10px; background: #efece5; border-radius: 4px; overflow: hidden;"><span style="display: block; width: 21%; height: 100%; background: #4a3aa7;"></span></span><span class="num" style="width: 40px; text-align: right;">21 %</span></div>
+          <div style="display: flex; align-items: center; gap: 10px;"><span style="width: 150px; color: #52514e;">Transferencia</span><span style="flex: 1; height: 10px; background: #efece5; border-radius: 4px; overflow: hidden;"><span style="display: block; width: 12%; height: 100%; background: #4a3aa7;"></span></span><span class="num" style="width: 40px; text-align: right;">12 %</span></div>
+          <div style="display: flex; align-items: center; gap: 10px;"><span style="width: 150px; color: #52514e;">Mercado Pago</span><span style="flex: 1; height: 10px; background: #efece5; border-radius: 4px; overflow: hidden;"><span style="display: block; width: 9%; height: 100%; background: #4a3aa7;"></span></span><span class="num" style="width: 40px; text-align: right;">9 %</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="grid-column: span 8; display: flex; flex-direction: column; gap: 22px; min-height: 0;">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span class="serif" style="font-size: 20px;">Ventas por mes</span>
+        <svg viewBox="0 0 800 190" style="width: 100%; height: 190px;" preserveAspectRatio="none">
+          <line x1="0" y1="150" x2="800" y2="150" stroke="#c3c2b7" stroke-width="1"></line>
+          <line x1="0" y1="90" x2="800" y2="90" stroke="#e6e2d9" stroke-width="1"></line>
+          <line x1="0" y1="30" x2="800" y2="30" stroke="#e6e2d9" stroke-width="1"></line>
+          <polyline points="20,120 175,95 330,105 485,60 640,72 780,40" fill="none" stroke="#4a3aa7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+          <circle cx="780" cy="40" r="4" fill="#4a3aa7" stroke="#fdfcf9" stroke-width="2"></circle>
+          <text x="20" y="172" font-size="12" fill="#898781" font-family="Source Sans 3, sans-serif">ene</text>
+          <text x="175" y="172" font-size="12" fill="#898781" font-family="Source Sans 3, sans-serif">feb</text>
+          <text x="330" y="172" font-size="12" fill="#898781" font-family="Source Sans 3, sans-serif">mar</text>
+          <text x="485" y="172" font-size="12" fill="#898781" font-family="Source Sans 3, sans-serif">abr</text>
+          <text x="640" y="172" font-size="12" fill="#898781" font-family="Source Sans 3, sans-serif">may</text>
+          <text x="760" y="172" font-size="12" fill="#898781" font-family="Source Sans 3, sans-serif">jun</text>
+          <text x="690" y="34" font-size="13" fill="#1c1a17" font-family="Source Sans 3, sans-serif">$ 4,6 M</text>
+        </svg>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px;">
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span class="serif" style="font-size: 20px;">Top vendedores</span>
+          <svg viewBox="0 0 380 150" style="width: 100%; height: 150px;" preserveAspectRatio="none">
+            <text x="0" y="20" font-size="13" fill="#52514e" font-family="Source Sans 3, sans-serif">María Pérez</text>
+            <rect x="130" y="8" width="240" height="14" rx="4" fill="#4a3aa7"></rect>
+            <text x="0" y="50" font-size="13" fill="#52514e" font-family="Source Sans 3, sans-serif">Nicolás Álvarez</text>
+            <rect x="130" y="38" width="205" height="14" rx="4" fill="#4a3aa7"></rect>
+            <text x="0" y="80" font-size="13" fill="#52514e" font-family="Source Sans 3, sans-serif">Juan Gómez</text>
+            <rect x="130" y="68" width="170" height="14" rx="4" fill="#4a3aa7"></rect>
+            <text x="0" y="110" font-size="13" fill="#52514e" font-family="Source Sans 3, sans-serif">Sofía Díaz</text>
+            <rect x="130" y="98" width="120" height="14" rx="4" fill="#4a3aa7"></rect>
+            <text x="0" y="140" font-size="13" fill="#898781" font-family="Source Sans 3, sans-serif">(sin vendedor)</text>
+            <rect x="130" y="128" width="60" height="14" rx="4" fill="#4a3aa7"></rect>
+          </svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span class="serif" style="font-size: 20px;">Ventas por categoría</span>
+          <svg viewBox="0 0 380 150" style="width: 100%; height: 150px;" preserveAspectRatio="none">
+            <line x1="0" y1="132" x2="380" y2="132" stroke="#c3c2b7" stroke-width="1"></line>
+            <rect x="18" y="20" width="22" height="112" rx="4" fill="#4a3aa7"></rect>
+            <rect x="78" y="48" width="22" height="84" rx="4" fill="#4a3aa7"></rect>
+            <rect x="138" y="62" width="22" height="70" rx="4" fill="#4a3aa7"></rect>
+            <rect x="198" y="82" width="22" height="50" rx="4" fill="#4a3aa7"></rect>
+            <rect x="258" y="92" width="22" height="40" rx="4" fill="#4a3aa7"></rect>
+            <rect x="318" y="110" width="22" height="22" rx="4" fill="#4a3aa7"></rect>
+            <text x="6" y="147" font-size="11" fill="#898781" font-family="Source Sans 3, sans-serif">Fiambrería</text>
+            <text x="72" y="147" font-size="11" fill="#898781" font-family="Source Sans 3, sans-serif">Bebidas</text>
+            <text x="130" y="147" font-size="11" fill="#898781" font-family="Source Sans 3, sans-serif">Almacén</text>
+            <text x="188" y="147" font-size="11" fill="#898781" font-family="Source Sans 3, sans-serif">Limpieza</text>
+            <text x="244" y="147" font-size="11" fill="#898781" font-family="Source Sans 3, sans-serif">Perfumería</text>
+            <text x="306" y="147" font-size="11" fill="#898781" font-family="Source Sans 3, sans-serif">Panadería</text>
+          </svg>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0; border-top: 1px solid #1c1a17; margin-top: auto;">
+        <div style="display: flex; gap: 26px; font-size: 14px; padding: 12px 0 0;">
+          <span style="font-weight: 600;">Productos</span><span style="color: #6f6a62;">Vendedores</span><span style="color: #6f6a62;">Ventas</span><span style="color: #6f6a62;">Pagos</span>
+          <span style="flex: 1;"></span><span style="color: #898781; font-size: 13px;">40 productos</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0 16px; font-size: 13px; padding: 10px 0 6px; color: #6f6a62; border-bottom: 1px solid #e6e2d9;">
+          <span>Producto</span><span>Categoría</span><span style="text-align: right;">Total ventas</span><span style="text-align: right;">Unidades</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0 16px; font-size: 14px; padding: 7px 0; border-bottom: 1px solid #f0ede6;">
+          <span>Fernet Branca 750ml</span><span style="color: #52514e;">Bebidas</span><span class="num" style="text-align: right;">$ 3.212.900</span><span class="num" style="text-align: right;">221</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0 16px; font-size: 14px; padding: 7px 0;">
+          <span>Queso Sardo x kg</span><span style="color: #52514e;">Fiambrería</span><span class="num" style="text-align: right;">$ 2.980.400</span><span class="num" style="text-align: right;">169</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

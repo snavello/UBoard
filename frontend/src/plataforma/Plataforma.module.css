@@ -1,0 +1,12 @@
+.pagina { display: flex; flex-direction: column; gap: 40px; }
+.seccion { display: flex; flex-direction: column; gap: 14px; }
+.cabeceraSeccion { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.formularioLinea { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.formularioUsuario { display: grid; grid-template-columns: 2fr 2fr 2fr 1fr auto; gap: 8px; align-items: center; }
+.enlace { border: none; background: none; padding: 0; color: var(--acento); cursor: pointer; font: inherit; }
+.enlace:hover { text-decoration: underline; }
+.filaActiva { background: var(--acento-suave); }
+.accionesFila { display: flex; gap: 6px; }
+@media (max-width: 900px) {
+  .formularioUsuario { grid-template-columns: 1fr 1fr; }
+}
