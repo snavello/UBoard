@@ -47,6 +47,7 @@ export interface ResultadoTarea {
   version?: number;
   resumen?: string;
   relaciones?: { id: string; desde: string; hacia: string; confianza: number; estado: string }[];
+  claude?: { usado: boolean; cache: boolean; modelo?: string; tokens_entrada?: number; tokens_salida?: number; advertencia?: string };
 }
 
 export interface Tarea {

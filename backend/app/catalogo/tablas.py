@@ -191,6 +191,26 @@ class Fuente(Base):
     workspace: Mapped[Workspace] = relationship()
 
 
+class Inferencia(Base):
+    """Cada consulta a Claude (fase 2): cache por huella del pedido y
+    auditoria de tokens para vigilar el gasto."""
+
+    __tablename__ = "inferencia"
+    __table_args__ = (UniqueConstraint("workspace_id", "huella"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspace.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(40))  # semantica | spec
+    huella: Mapped[str] = mapped_column(String(32))
+    modelo_claude: Mapped[str] = mapped_column(String(80))
+    respuesta: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    tokens_entrada: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    tokens_salida: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    workspace: Mapped[Workspace] = relationship()
+
+
 class VersionModelo(Base):
     """Cada cambio al modelo semantico es una fila nueva con el modelo ENTERO
     (`contenido`), asi deshacer es volver a la version anterior. `operacion`

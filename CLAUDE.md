@@ -63,7 +63,8 @@ backend/
     modelo/         # esquema (Pydantic), validacion (3 capas + efectivo), operaciones (versiones)
     dashboard/      # esquema del spec, validacion (compila paneles), filtros, paneles, operaciones
     perfilado/      # perfil por columna y tabla (PerfilFuente), calculado en la ingesta
-    inferencia/     # heuristicas (claves, relaciones, tipos, metricas), fusion, tarea; Claude en el paso 11
+    inferencia/     # heuristicas (claves, relaciones, tipos, metricas), llm (ClienteLLM real/falso),
+                    # semantica (prompt, validacion, aplicar), fusion, tarea
     asociativo/ asistente/  # fases 3 y 4
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
@@ -234,7 +235,20 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     fase 2 ya cumplida en test: 5/5 claves y 4/4 relaciones sin
     intervención. 11 tests de heurísticas + 6 de fusión + 3 de API (267 en
     total).
-  - Pasos 11 a 15: pendientes.
+  - Paso 11 (Claude): HECHO 2026-09-09 (v0.11.01). `anthropic==1.4.0`;
+    `inferencia/llm.py` (`ClienteLLM`, `ClienteAnthropic` con
+    `messages.parse` + Pydantic, `ClienteFalso`, `fijar_cliente_llm` para
+    tests); `inferencia/semantica.py` (prompt de sistema rioplatense, pedido
+    compacto con perfil + relaciones + muestra, `RespuestaSemantica`,
+    validación contra el modelo, reintento con feedback, `aplicar_semantica`);
+    tabla `inferencia` (migración `822d7c18640f`) como caché por huella y
+    auditoría de tokens; `Entidad.origen`; config `ANTHROPIC_API_KEY`,
+    `MODELO_CLAUDE`, `FILAS_MUESTRA_LLM`, `ENVIAR_MUESTRA_LLM`; la tarea sigue
+    solo con heurísticas si Claude falla (advertencia en el resultado).
+    Test en vivo `tests/test_llm_en_vivo.py` (deseleccionado por defecto)
+    pasó contra `claude-sonnet-5`: ~8 k tokens de entrada, ~2,5 k de salida.
+    5 tests de semántica + 1 de API (273 en total, más 1 en vivo).
+  - Pasos 12 a 15: pendientes.
 - Fases 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -361,6 +375,44 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   a los ids existentes (`ventas.vendedor` → `ventas.id_vendedor`).
 - La tarea falla con E-INF-02 (sin fuentes), E-INF-03 (fuentes sin perfil:
   resubir) o E-INF-04 (la fusión no valida: bug, nunca debería pasar).
+
+## Reglas de Claude en la inferencia (vigentes desde el paso 11)
+- **Claude solo opina sobre lo semántico**: nombres de entidades y campos,
+  tipo hechos/dimensión, sinónimos, descripciones, tipos semánticos
+  **dudosos** (confianza heurística < 0.9; identificador y clave_foranea
+  nunca) y la lista de métricas (reemplaza a las tentativas; todas
+  `propuesta`, `origen: llm`, confianza 0.8). Claves y relaciones no se
+  tocan.
+- Todo pasa por `ClienteLLM` (`inferencia/llm.py`). El real usa
+  `messages.parse(output_format=Pydantic)` (salida estructurada nativa) y
+  convierte `anthropic.APIError` en `E-INF-01`. **Los tests nunca tocan la
+  red**: `conftest.py` instala un `ClienteFalso` vacío en todos los tests
+  (autouse) y la fixture `llm_falso(respuestas)` carga respuestas grabadas.
+  `tests/test_llm_en_vivo.py` (marker `en_vivo`, deseleccionado en
+  `pytest.ini`) se corre a mano con `-m en_vivo -s` antes de cerrar un paso
+  que toque el prompt.
+- El pedido (`armar_pedido`) es JSON compacto: por entidad id, fuente,
+  filas, clave, campos con tipo_dato, tipo tentativo, confianza y perfil
+  resumido (nulos, distintos, min/max, 5 frecuentes, patrón), la muestra
+  (`FILAS_MUESTRA_LLM`, 30; vacía con `ENVIAR_MUESTRA_LLM=false`), las
+  relaciones ya decididas y las métricas tentativas. Ni la clave ni las
+  muestras se loguean.
+- La respuesta se valida contra el modelo (`validar_respuesta`: ids
+  existentes, identificador/clave_foranea intactos, métricas con campo
+  existente y agregación compatible, cocientes entre métricas de la misma
+  lista) y se **reintenta una vez** con los errores como feedback; a la
+  segunda falla, `E-INF-05`. Cualquier `ErrorApp` de Claude deja la
+  propuesta heurística y va como `claude.advertencia` en el resultado de
+  la tarea; la tarea no falla por Claude.
+- **Caché**: tabla `inferencia` con huella sha256(modelo + sistema +
+  pedido)[:32] única por workspace; misma huella = misma respuesta sin
+  llamar (resultado `claude.cache: true`, 0 tokens). Guarda tokens de
+  entrada y salida para vigilar el tope de USD 10.
+- `Entidad.origen` (`usuario` por defecto): la fusión conserva nombre, tipo
+  y sinónimos solo si la entidad existente es del usuario; si la nombró la
+  heurística o Claude, toma los de la propuesta nueva.
+- Polling del frontend con `refetchIntervalInBackground: true`: la
+  inferencia tarda 20 a 30 s y la gente cambia de pestaña.
 
 ## Reglas del modelo semántico (vigentes desde el paso 4)
 - **Referencias**: `Entidad.fuente` = `nombre_tabla` de la fuente ingestada;

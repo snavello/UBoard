@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 
 import app.catalogo.tablas  # noqa: E402, F401  registra las tablas en Base.metadata
 from app.almacen import AlmacenLocal, obtener_almacen  # noqa: E402
+from app.inferencia.llm import ClienteFalso, fijar_cliente_llm  # noqa: E402
 from app.catalogo import operaciones  # noqa: E402
 from app.catalogo.base import Base  # noqa: E402
 from app.catalogo.sesion import obtener_sesion  # noqa: E402
@@ -200,6 +201,31 @@ def spec_prueba() -> dict:
     import json
 
     return json.loads((DATOS_PRUEBA / "spec.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(autouse=True)
+def sin_red_llm():
+    """Ningun test toca la API de Anthropic: un cliente falso sin respuestas
+    (que falla con E-INF-01, como si no hubiera clave util) salvo que el test
+    pida `llm_falso` con respuestas grabadas."""
+    fijar_cliente_llm(ClienteFalso([]))
+    try:
+        yield
+    finally:
+        fijar_cliente_llm(None)
+
+
+@pytest.fixture
+def llm_falso():
+    """Devuelve una funcion que instala un ClienteFalso con las respuestas
+    dadas y lo retorna, para inspeccionar `pedidos` despues."""
+
+    def _instalar(respuestas: list) -> ClienteFalso:
+        cliente_falso = ClienteFalso(respuestas, modelo="claude-falso")
+        fijar_cliente_llm(cliente_falso)
+        return cliente_falso
+
+    return _instalar
 
 
 @pytest.fixture

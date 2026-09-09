@@ -143,6 +143,7 @@ function TareaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: numbe
   const tarea = useQuery({
     queryKey: ["tarea", workspaceId, tareaId],
     queryFn: () => pedir<Tarea>(rutaWorkspace(workspaceId, `/tareas/${tareaId}`)),
+    refetchIntervalInBackground: true, // el polling sigue aunque la pestania no este visible
     refetchInterval: (consulta) => {
       const estado = consulta.state.data?.estado;
       return estado === "pendiente" || estado === "corriendo" ? 800 : false;
@@ -176,6 +177,7 @@ function PropuestaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: n
   const tarea = useQuery({
     queryKey: ["tarea", workspaceId, tareaId],
     queryFn: () => pedir<Tarea>(rutaWorkspace(workspaceId, `/tareas/${tareaId}`)),
+    refetchIntervalInBackground: true, // el polling sigue aunque la pestania no este visible
     refetchInterval: (consulta) => {
       const estado = consulta.state.data?.estado;
       return estado === "pendiente" || estado === "corriendo" ? 800 : false;
@@ -200,6 +202,13 @@ function PropuestaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: n
           <>
             Modelo propuesto (versión {resultado.version}): {resultado.resumen}
             {resultado.relaciones && resultado.relaciones.length > 0 ? `, ${seguras} con confianza alta` : ""}.{" "}
+            {resultado.claude?.usado
+              ? resultado.claude.cache
+                ? "Nombres y métricas de Claude (respuesta guardada, sin costo). "
+                : `Nombres y métricas de Claude (${formatearNumero((resultado.claude.tokens_entrada ?? 0) + (resultado.claude.tokens_salida ?? 0), 0)} tokens). `
+              : resultado.claude?.advertencia
+                ? `Solo heurísticas: ${resultado.claude.advertencia} `
+                : ""}
             <Link to="/modelo">Revisalo en Modelo</Link>.
           </>
         ) : estado === "error" ? (

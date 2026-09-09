@@ -441,7 +441,43 @@ de JSON y la propuesta, `POST /modelo/proponer` y el botón "Proponer
 modelo" en Fuentes (deshabilitado mientras haya ingestas corriendo, con
 aviso, polling y link a Modelo).
 
-**Detalle de entorno.** El navegador embebido perdió la cookie de sesión en
+**Detalle de entorno (paso 10).** El navegador embebido perdió la cookie de sesión en
 una navegación completa después del login por formulario; loguearse con
 `fetch` desde la consola y recién después navegar funcionó. No es un
 problema de la app (curl y los tests de API confirman el flujo).
+
+## 2026-09-09 — Fase 2, paso 11: Claude propone la semántica (v0.11.01)
+
+Antes de codear se consultó la forma vigente del SDK: `anthropic` 1.4.0
+tiene salida estructurada nativa (`client.messages.parse(...,
+output_format=ModeloPydantic)`), así que no hizo falta forzar un tool.
+`ClienteLLM` es la interfaz; `ClienteAnthropic` la implementación real y
+`ClienteFalso` la de los tests (respuestas grabadas, guarda los pedidos
+para inspeccionar el prompt). El conftest instala el falso en TODOS los
+tests: la suite jamás gasta.
+
+El prompt de sistema fija el tono (rioplatense, nombres cortos, mayúscula
+inicial) y el reparto: Claude nombra, clasifica hechos/dimensión, da
+sinónimos, corrige tipos dudosos y propone entre 3 y 8 métricas; claves y
+relaciones ya vienen decididas. El pedido es JSON compacto con perfil y
+muestra. La respuesta se valida contra el modelo y se reintenta una vez con
+los errores como feedback (§10 de la spec).
+
+Prueba en vivo con la clave de Sd (`tests/test_llm_en_vivo.py`): pasó a la
+primera contra `claude-sonnet-5` con 8.048 tokens de entrada y 2.568 de
+salida. Propuso "Medios de pago", "Vendedores" con sinónimos "empleados,
+personal de ventas", y 6 métricas prácticamente iguales a las del modelo
+escrito a mano en la fase 1 (Total ventas, Cantidad de ventas, Ticket
+promedio, Unidades vendidas, Total pagos, Vendedores activos). Desde el
+navegador contra la demo (con muestra de 30 filas): 13.129 tokens de
+entrada, 2.613 de salida, versión 6 del modelo con lo confirmado intacto.
+
+**Dos cosas que aparecieron probando.** (1) Las entidades que creaba la
+heurística no tenían `origen`, así que la fusión las trataba como del
+usuario y no dejaba que Claude las renombrara: se agregó `Entidad.origen`.
+(2) TanStack Query pausa el `refetchInterval` cuando la pestaña no está
+visible; con una tarea de 30 segundos la gente cambia de pestaña y volvía a
+"Analizando…" para siempre. `refetchIntervalInBackground: true` en los dos
+sondeos de Fuentes.
+
+Costo acumulado de la fase hasta acá: tres llamadas reales, unos USD 0,15.

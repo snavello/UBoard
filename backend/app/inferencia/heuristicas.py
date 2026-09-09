@@ -391,6 +391,7 @@ def proponer_modelo(
                 tipo="hechos" if fuente.nombre_tabla in con_fk_efectiva else "dimension",
                 clave_primaria=[id_valido(clave)],
                 campos=campos,
+                origen="heuristica",
             )
         )
 

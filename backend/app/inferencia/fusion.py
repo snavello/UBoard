@@ -7,7 +7,9 @@ creo a mano (origen `usuario`) se respeta tal cual; lo que seguia
 lo propuesto que ya no aparece se descarta. Las entidades se emparejan por
 fuente, los campos por columna de origen, las relaciones por sus extremos y
 las metricas por id. Los atributos de entidad (nombre, tipo, sinonimos,
-descripcion, clave primaria) se conservan del modelo existente.
+descripcion) se conservan si la entidad existente es `origen: usuario`; si
+la habia nombrado la heuristica o Claude, se toman de la propuesta (que
+puede traer nombres mejores). La clave primaria se conserva siempre.
 """
 from app.modelo.esquema import Campo, DimensionTiempo, Entidad, ExpresionAgregacion, Metrica, ModeloSemantico, Relacion
 
@@ -50,8 +52,9 @@ def _fusionar_entidades(existentes: list[Entidad], propuestas: list[Entidad]) ->
         campos = _fusionar_campos(existente.campos, propuesta.campos)
         ids_campos = {campo.id for campo in campos}
         clave = [campo for campo in existente.clave_primaria if campo in ids_campos] or propuesta.clave_primaria
+        base = existente if existente.origen == "usuario" else propuesta
         resultado.append(
-            existente.model_copy(update={"campos": campos, "clave_primaria": clave, "tipo": existente.tipo})
+            base.model_copy(update={"id": existente.id, "campos": campos, "clave_primaria": clave})
         )
     return resultado
 

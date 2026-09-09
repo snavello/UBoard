@@ -182,6 +182,68 @@ def test_proponer_modelo_desde_cero_y_reproponer_fusiona(cliente, datos, ingresa
     assert version_3["diff"]["metricas"]["cambiados"] == []
 
 
+def _respuesta_claude(modelo: dict) -> dict:
+    nombres = {"ventas": "Ventas", "vendedores": "Vendedores", "productos": "Productos", "pagos": "Pagos", "medios_pago": "Medios de pago"}
+    entidades = [
+        {
+            "id": e["id"],
+            "nombre": nombres[e["id"]],
+            "tipo": e["tipo"],
+            "sinonimos": ["facturación"] if e["id"] == "ventas" else [],
+            "campos": [{"id": c["id"], "nombre": c["nombre"].capitalize(), "tipo_semantico": c["tipo_semantico"]} for c in e["campos"]],
+        }
+        for e in modelo["entidades"]
+    ]
+    metricas = [
+        {"id": "total_ventas", "nombre": "Total ventas", "tipo": "agregacion", "agregacion": "suma", "campo": "ventas.importe", "formato": "moneda"},
+        {"id": "cantidad_ventas", "nombre": "Cantidad de ventas", "tipo": "agregacion", "agregacion": "conteo", "campo": "ventas.id_venta", "formato": "entero"},
+        {"id": "ticket_promedio", "nombre": "Ticket promedio", "tipo": "cociente", "numerador": "total_ventas", "denominador": "cantidad_ventas", "formato": "moneda"},
+    ]
+    return {"entidades": entidades, "metricas": metricas}
+
+
+def test_proponer_con_claude_falso_aplica_semantica_y_cachea(cliente, datos, ingresar, cargar_datos_prueba, cola, llm_falso, sesion_db):
+    from app.catalogo.tablas import Inferencia
+
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+
+    # Primero solo heuristica (el cliente falso sin respuestas falla como E-INF-01 y la tarea sigue)
+    tarea = _proponer(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada", tarea
+    assert tarea["resultado"]["claude"]["usado"] is False
+    assert tarea["resultado"]["claude"]["advertencia"].startswith("E-INF-01")
+    heuristico = cliente.get(_ruta(workspace_id)).json()["contenido"]
+    assert heuristico["entidades"][0]["nombre"] == "Medios pago"
+
+    # Ahora con respuesta grabada: nombres, sinonimos y metricas de Claude
+    falso = llm_falso([_respuesta_claude(heuristico)])
+    tarea = _proponer(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada", tarea
+    claude = tarea["resultado"]["claude"]
+    assert claude == {"usado": True, "cache": False, "modelo": "claude-falso", "tokens_entrada": 100, "tokens_salida": 50}
+    assert len(falso.pedidos) == 1 and "muestra" in falso.pedidos[0]["usuario"]
+    actual = cliente.get(_ruta(workspace_id)).json()
+    assert actual["numero"] == 2
+    modelo = actual["contenido"]
+    medios = next(e for e in modelo["entidades"] if e["id"] == "medios_pago")
+    assert medios["nombre"] == "Medios de pago" and medios["origen"] == "llm"
+    assert next(e for e in modelo["entidades"] if e["id"] == "ventas")["sinonimos"] == ["facturación"]
+    assert [m["id"] for m in modelo["metricas"]] == ["total_ventas", "cantidad_ventas", "ticket_promedio"]
+    assert all(m["origen"] == "llm" and m["estado"] == "propuesta" for m in modelo["metricas"])
+    assert len([r for r in modelo["relaciones"] if r["confianza"] >= 0.9]) == 4, "las relaciones no las toca Claude"
+    guardadas = sesion_db.query(Inferencia).filter_by(workspace_id=workspace_id).all()
+    assert len(guardadas) == 1 and guardadas[0].tokens_entrada == 100 and guardadas[0].tipo == "semantica"
+
+    # Tercera vez, mismo pedido: sale de la cache, sin llamar al cliente
+    falso = llm_falso([])
+    tarea = _proponer(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada", tarea
+    assert tarea["resultado"]["claude"]["cache"] is True and falso.pedidos == []
+    assert cliente.get(_ruta(workspace_id)).json()["numero"] == 3
+
+
 def test_proponer_sin_fuentes_deja_la_tarea_en_error(cliente, datos, ingresar, cola):
     ingresar("constructor@acme.test")
     tarea = _proponer(cliente, cola, datos.acme_workspace_id)

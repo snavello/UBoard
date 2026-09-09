@@ -14,3 +14,4 @@ openpyxl==3.1.5
 charset-normalizer==3.5.1
 pyjwt==2.13.0
 python-multipart==0.0.32
+anthropic==1.4.0

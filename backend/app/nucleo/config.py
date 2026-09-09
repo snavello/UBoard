@@ -47,6 +47,14 @@ class Configuracion(BaseSettings):
     umbral_inclusion_fk: float = 0.95
     umbral_similitud_nombre: float = 0.8
 
+    # Claude (fase 2). Sin clave, la inferencia corre solo con heuristicas y
+    # avisa. Tope de gasto acordado con Sd: USD 10 para toda la fase.
+    anthropic_api_key: str | None = None
+    modelo_claude: str = "claude-sonnet-5"
+    filas_muestra_llm: int = 30
+    enviar_muestra_llm: bool = True
+    timeout_llm_segundos: float = 120.0
+
     # local | pruebas | demo | prod
     entorno: str = "local"
 

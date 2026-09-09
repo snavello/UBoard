@@ -71,6 +71,8 @@ class Entidad(_Base):
     campos: list[Campo] = Field(min_length=1)
     sinonimos: list[str] = Field(default_factory=list)
     descripcion: str | None = None
+    # Quien puso nombre, tipo y sinonimos: la fusion no pisa lo del usuario
+    origen: Origen = "usuario"
 
     def campo(self, campo_id: str) -> Campo | None:
         return next((campo for campo in self.campos if campo.id == campo_id), None)
