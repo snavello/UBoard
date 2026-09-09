@@ -1,5 +1,5 @@
 .pagina { display: flex; flex-direction: column; gap: 36px; }
-.subida { display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--superficie); }
+.subida, .proponer { display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--superficie); }
 .controlesSubida { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .archivo { flex: 1; min-width: 240px; }
 .tareas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }

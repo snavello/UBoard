@@ -129,3 +129,68 @@ def test_roles_y_aislamiento(cliente, datos, ingresar, cargar_datos_prueba, mode
     ajeno = cliente.get(_ruta(workspace_id))
     assert ajeno.status_code == 404
     assert ajeno.json()["codigo"] == "E-WS-01"
+
+
+def _proponer(cliente, cola, workspace_id: int) -> dict:
+    respuesta = cliente.post(f"{_ruta(workspace_id)}/proponer")
+    assert respuesta.status_code == 202, respuesta.text
+    tarea = respuesta.json()
+    assert tarea["tipo"] == "inferencia.proponer_modelo"
+    cola.esperar(tarea["id"], timeout=120)
+    return cliente.get(f"/api/workspaces/{workspace_id}/tareas/{tarea['id']}").json()
+
+
+def test_proponer_modelo_desde_cero_y_reproponer_fusiona(cliente, datos, ingresar, cargar_datos_prueba, cola):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+
+    tarea = _proponer(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada", tarea
+    resultado = tarea["resultado"]
+    assert resultado["version"] == 1
+    assert resultado["resumen"].startswith("5 entidades, 4 relaciones")
+    assert {(r["desde"], r["hacia"]) for r in resultado["relaciones"]} == {
+        ("ventas.vendedor", "vendedores.id_vendedor"),
+        ("ventas.id_producto", "productos.id_producto"),
+        ("pagos.id_venta", "ventas.id_venta"),
+        ("pagos.id_medio_pago", "medios_pago.id_medio_pago"),
+    }
+    assert all(r["confianza"] >= 0.9 and r["estado"] == "propuesta" for r in resultado["relaciones"])
+
+    actual = cliente.get(_ruta(workspace_id)).json()
+    assert actual["numero"] == 1 and actual["operacion"] == "proponer_modelo"
+    assert actual["autor_id"] == datos.acme_constructor.id
+    efectivo = cliente.get(f"{_ruta(workspace_id)}?efectivo=true").json()["contenido"]
+    assert len(efectivo["relaciones"]) == 4 and efectivo["metricas"] == []
+
+    # El constructor confirma una metrica a mano (cargando el JSON entero, como en la fase 1)
+    contenido = actual["contenido"]
+    metrica = next(m for m in contenido["metricas"] if m["id"] == "total_importe")
+    metrica["estado"] = "confirmada"
+    metrica["nombre"] = "Facturación"
+    assert cliente.put(_ruta(workspace_id), json=contenido).status_code == 201
+
+    # Reproponer: version 3, la metrica confirmada sigue con su nombre
+    tarea = _proponer(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada", tarea
+    assert tarea["resultado"]["version"] == 3
+    version_3 = cliente.get(_ruta(workspace_id)).json()
+    assert version_3["operacion"] == "proponer_modelo"
+    facturacion = next(m for m in version_3["contenido"]["metricas"] if m["id"] == "total_importe")
+    assert facturacion["estado"] == "confirmada" and facturacion["nombre"] == "Facturación"
+    assert version_3["diff"]["metricas"]["cambiados"] == []
+
+
+def test_proponer_sin_fuentes_deja_la_tarea_en_error(cliente, datos, ingresar, cola):
+    ingresar("constructor@acme.test")
+    tarea = _proponer(cliente, cola, datos.acme_workspace_id)
+    assert tarea["estado"] == "error"
+    assert tarea["error"].startswith("E-INF-02")
+
+
+def test_proponer_exige_constructor(cliente, datos, ingresar, cola):
+    ingresar("visualizador@acme.test")
+    assert cliente.post(f"{_ruta(datos.acme_workspace_id)}/proponer").status_code == 403
+    ingresar("constructor@beta.test")
+    assert cliente.post(f"{_ruta(datos.acme_workspace_id)}/proponer").status_code == 404

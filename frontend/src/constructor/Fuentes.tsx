@@ -2,6 +2,7 @@
    esquema. */
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
 
 import { pedir, rutaWorkspace } from "../compartido/api";
 import { AvisoError } from "../compartido/componentes/Aviso";
@@ -20,6 +21,9 @@ export function Fuentes() {
   const clienteConsultas = useQueryClient();
   const entrada = useRef<HTMLInputElement>(null);
   const [tareas, setTareas] = useState<string[]>([]);
+  const [terminadas, setTerminadas] = useState<string[]>([]);
+  const [tareaPropuesta, setTareaPropuesta] = useState<string | null>(null);
+  const ingestasCorriendo = tareas.some((tareaId) => !terminadas.includes(tareaId));
 
   const fuentes = useQuery({ queryKey: ["fuentes", workspaceId], queryFn: () => pedir<Fuente[]>(rutaWorkspace(workspaceId, "/fuentes")) });
 
@@ -42,8 +46,18 @@ export function Fuentes() {
     },
   });
 
-  const alTerminar = () => {
+  const alTerminar = (tareaId: string) => {
+    setTerminadas((actuales) => (actuales.includes(tareaId) ? actuales : [...actuales, tareaId]));
     void clienteConsultas.invalidateQueries({ queryKey: ["fuentes", workspaceId] });
+    void clienteConsultas.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
+  };
+
+  const proponer = useMutation({
+    mutationFn: () => pedir<Tarea>(rutaWorkspace(workspaceId, "/modelo/proponer"), { method: "POST" }),
+    onSuccess: (tarea) => setTareaPropuesta(tarea.id),
+  });
+  const alTerminarPropuesta = () => {
+    void clienteConsultas.invalidateQueries({ queryKey: ["modelo", workspaceId] });
     void clienteConsultas.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
   };
 
@@ -76,7 +90,7 @@ export function Fuentes() {
           {tareas.length > 0 && (
             <ul className={estilos.tareas}>
               {tareas.map((tareaId) => (
-                <TareaEnCurso key={tareaId} workspaceId={workspaceId} tareaId={tareaId} alTerminar={alTerminar} />
+                <TareaEnCurso key={tareaId} workspaceId={workspaceId} tareaId={tareaId} alTerminar={() => alTerminar(tareaId)} />
               ))}
             </ul>
           )}
@@ -96,6 +110,30 @@ export function Fuentes() {
           )}
           {borrar.isError && <AvisoError error={borrar.error} titulo="No se pudo borrar" />}
         </section>
+
+        {fuentes.data && fuentes.data.length > 0 && (
+          <section className={estilos.proponer}>
+            <div>
+              <h2>Proponer el modelo</h2>
+              <p className="secundario">
+                {ingestasCorriendo
+                  ? "Esperá a que terminen las ingestas: la propuesta se arma con todas las fuentes juntas."
+                  : "Con las fuentes cargadas, UBoard busca claves, relaciones y tipos de cada columna y arma una propuesta de modelo. Lo que ya confirmaste o rechazaste en el modelo se respeta."}
+              </p>
+            </div>
+            <div className={estilos.controlesSubida}>
+              <button type="button" className="boton boton--primario" disabled={ingestasCorriendo || proponer.isPending} onClick={() => proponer.mutate()}>
+                {proponer.isPending ? "Encolando…" : "Proponer modelo"}
+              </button>
+            </div>
+            {proponer.isError && <AvisoError error={proponer.error} titulo="No se pudo proponer el modelo" />}
+            {tareaPropuesta && (
+              <ul className={estilos.tareas}>
+                <PropuestaEnCurso key={tareaPropuesta} workspaceId={workspaceId} tareaId={tareaPropuesta} alTerminar={alTerminarPropuesta} />
+              </ul>
+            )}
+          </section>
+        )}
       </div>
     </Marco>
   );
@@ -129,6 +167,46 @@ function TareaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: numbe
           : estado === "error"
             ? error
             : mensaje ?? "Procesando…"}
+      </span>
+    </li>
+  );
+}
+
+function PropuestaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: number; tareaId: string; alTerminar: () => void }) {
+  const tarea = useQuery({
+    queryKey: ["tarea", workspaceId, tareaId],
+    queryFn: () => pedir<Tarea>(rutaWorkspace(workspaceId, `/tareas/${tareaId}`)),
+    refetchInterval: (consulta) => {
+      const estado = consulta.state.data?.estado;
+      return estado === "pendiente" || estado === "corriendo" ? 800 : false;
+    },
+  });
+  const estado = tarea.data?.estado;
+  useEffect(() => {
+    if (estado === "terminada" || estado === "error") alTerminar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado]);
+
+  if (!tarea.data) return <li className="mudo">Encolando…</li>;
+  const { progreso, mensaje, resultado, error } = tarea.data;
+  const seguras = resultado?.relaciones?.filter((relacion) => relacion.confianza >= 0.9).length ?? 0;
+  return (
+    <li className={estilos.tarea}>
+      <div className={estilos.barraProgreso} aria-hidden="true">
+        <span style={{ width: `${estado === "error" ? 100 : progreso}%` }} className={estado === "error" ? estilos.progresoError : undefined} />
+      </div>
+      <span>
+        {estado === "terminada" && resultado ? (
+          <>
+            Modelo propuesto (versión {resultado.version}): {resultado.resumen}
+            {resultado.relaciones && resultado.relaciones.length > 0 ? `, ${seguras} con confianza alta` : ""}.{" "}
+            <Link to="/modelo">Revisalo en Modelo</Link>.
+          </>
+        ) : estado === "error" ? (
+          error
+        ) : (
+          mensaje ?? "Analizando…"
+        )}
       </span>
     </li>
   );

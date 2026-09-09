@@ -40,13 +40,22 @@ export interface Salud {
   entorno: string;
 }
 
+export interface ResultadoTarea {
+  // ingesta.procesar_archivo
+  fuentes?: { id: number; nombre_tabla: string; filas: number; reemplazada: boolean }[];
+  // inferencia.proponer_modelo
+  version?: number;
+  resumen?: string;
+  relaciones?: { id: string; desde: string; hacia: string; confianza: number; estado: string }[];
+}
+
 export interface Tarea {
   id: string;
   tipo: string;
   estado: "pendiente" | "corriendo" | "terminada" | "error";
   progreso: number;
   mensaje: string | null;
-  resultado: { fuentes?: { id: number; nombre_tabla: string; filas: number; reemplazada: boolean }[] } | null;
+  resultado: ResultadoTarea | null;
   error: string | null;
   creada_en: string;
 }

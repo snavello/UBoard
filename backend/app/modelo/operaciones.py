@@ -67,6 +67,15 @@ def modelo_de(version: VersionModelo) -> ModeloSemantico:
 def cargar_modelo(sesion: Session, workspace: Workspace, contenido: Any, usuario: Usuario | None) -> VersionModelo:
     """Valida y guarda una nueva version con el modelo entero."""
     modelo = validar_modelo(sesion, workspace, contenido)
+    return guardar_version(sesion, workspace, modelo, operacion=OPERACION_CARGAR_JSON, autor_id=usuario.id if usuario else None)
+
+
+def guardar_version(
+    sesion: Session, workspace: Workspace, modelo: ModeloSemantico, *, operacion: str, autor_id: int | None
+) -> VersionModelo:
+    """Nueva fila en version_modelo con el modelo YA validado, el numero
+    siguiente y el diff contra la version anterior. La comparten la carga de
+    JSON, la propuesta heuristica y las operaciones del wizard."""
     anterior = version_actual(sesion, workspace)
     numero = (anterior.numero if anterior else 0) + 1
     modelo = modelo.model_copy(update={"version": numero})
@@ -74,10 +83,10 @@ def cargar_modelo(sesion: Session, workspace: Workspace, contenido: Any, usuario
         workspace_id=workspace.id,
         numero=numero,
         contenido=modelo.model_dump(mode="json"),
-        operacion=OPERACION_CARGAR_JSON,
+        operacion=operacion,
         diff=calcular_diff(modelo_de(anterior), modelo) if anterior else None,
         resumen=modelo.resumen(),
-        autor_id=usuario.id if usuario else None,
+        autor_id=autor_id,
     )
     sesion.add(version)
     sesion.commit()

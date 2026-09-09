@@ -63,7 +63,8 @@ backend/
     modelo/         # esquema (Pydantic), validacion (3 capas + efectivo), operaciones (versiones)
     dashboard/      # esquema del spec, validacion (compila paneles), filtros, paneles, operaciones
     perfilado/      # perfil por columna y tabla (PerfilFuente), calculado en la ingesta
-    inferencia/ asociativo/ asistente/  # fases 2 a 4
+    inferencia/     # heuristicas (claves, relaciones, tipos, metricas), fusion, tarea; Claude en el paso 11
+    asociativo/ asistente/  # fases 3 y 4
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
   tests/            # pytest; correr por archivo
@@ -221,7 +222,19 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     `3b453523b1e8`); `GET /fuentes/{id}/perfil` (E-ING-06 si no hay);
     `perfilada` en la salida de fuente; "Ver perfil" en Fuentes. 8 tests
     puros + 2 de API (247 en total).
-  - Pasos 10 a 15: pendientes.
+  - Paso 10 (heurísticas): HECHO 2026-09-09 (v0.10.01). `app/inferencia/`
+    (`heuristicas.py` puro: claves primarias, relaciones por inclusión de
+    filas + nombre, tipos semánticos por patrón, métricas obvias,
+    dimensiones de tiempo, todo con confianza y evidencia; `fusion.py`
+    respeta lo confirmado/rechazado y traduce referencias a los ids que ya
+    existen; `tarea.py` `inferencia.proponer_modelo`); `Campo.evidencia` y
+    `Metrica.confianza` en el esquema; `guardar_version` compartido en
+    `modelo/operaciones.py`; `POST /modelo/proponer` (202 + tarea); botón
+    "Proponer modelo" en Fuentes con aviso y polling. Aceptación de la
+    fase 2 ya cumplida en test: 5/5 claves y 4/4 relaciones sin
+    intervención. 11 tests de heurísticas + 6 de fusión + 3 de API (267 en
+    total).
+  - Pasos 11 a 15: pendientes.
 - Fases 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -317,6 +330,37 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - El perfil vive en `fuente.perfil` (JSONB nullable): una fuente ingestada
   antes del paso 9 no lo tiene y el endpoint responde E-ING-06 hasta que se
   resuba. El frontend lo pide con la huella y `actualizada_en` en la clave.
+
+## Reglas de inferencia (vigentes desde el paso 10)
+- `proponer_modelo(conexion, fuentes)` es puro: recibe `FuentePerfilada`
+  (nombre_tabla, esquema, perfil) y una conexión DuckDB con una vista por
+  fuente para medir inclusión; devuelve un `ModeloSemantico` donde todo es
+  `origen: heuristica`, `estado: propuesta`, salvo la clave primaria de cada
+  entidad, que va `confirmada` (una entidad no existe sin clave; la
+  confianza igual queda en `evidencia` para el semáforo).
+- Relación = inclusión por FILAS (no por distintos: un huérfano repetido no
+  la tira) ≥ `UMBRAL_INCLUSION_FK` (0.95), mismo tipo, destino única.
+  Confianza 0.7 + 0.2 nombre similar (difflib sobre raíces sin `id_`/plural,
+  `UMBRAL_SIMILITUD_NOMBRE` 0.8) + 0.05 inclusión total − 0.25 sin nombre a
+  favor. Sin nombre a favor se exige además no parecer medida y cubrir la
+  mitad de las claves destino. Entre las ≥ 0.9: una por columna, una por par
+  de entidades, sin ciclos (union-find); las sobrantes bajan a 0.89 con
+  `evidencia.bajada_por`. Una columna con relación clara pierde sus otras
+  candidatas sin nombre similar.
+- Entidad `hechos` = tiene alguna relación saliente ≥ 0.9; si no, `dimension`.
+  Métricas obvias: conteo de la clave por entidad de hechos, suma de montos
+  (salvo precios/tarifas) y de cantidades con nombre claro; dimensiones de
+  tiempo por cada fecha de una entidad de hechos.
+- Tipos semánticos dudosos quedan en 0.6 (los mira Claude en el paso 11).
+- `fusionar(existente, propuesta)`: entidades por fuente, campos por
+  columna de origen, relaciones por extremos, métricas por id. Lo
+  `confirmada`/`rechazada` u `origen: usuario` se conserva; lo `propuesta`
+  se reemplaza con evidencia fresca **sin cambiar el id del campo**; lo
+  propuesto que ya no viene se descarta; los atributos de entidad se
+  conservan. Antes de mezclar, las referencias de la propuesta se traducen
+  a los ids existentes (`ventas.vendedor` → `ventas.id_vendedor`).
+- La tarea falla con E-INF-02 (sin fuentes), E-INF-03 (fuentes sin perfil:
+  resubir) o E-INF-04 (la fusión no valida: bug, nunca debería pasar).
 
 ## Reglas del modelo semántico (vigentes desde el paso 4)
 - **Referencias**: `Entidad.fuente` = `nombre_tabla` de la fuente ingestada;

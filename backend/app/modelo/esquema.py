@@ -58,6 +58,8 @@ class Campo(_Base):
     origen: Origen = "usuario"
     estado: Estado = "confirmada"
     descripcion: str | None = None
+    # Por que la heuristica propuso esto (patron, unicidad, inclusion...): se muestra en el wizard
+    evidencia: dict[str, Any] = Field(default_factory=dict)
 
 
 class Entidad(_Base):
@@ -113,6 +115,7 @@ class Metrica(_Base):
     nombre: str = Field(min_length=1)
     expresion: ExpresionAgregacion | ExpresionCociente
     formato: Formato = "decimal"
+    confianza: float = Field(default=1.0, ge=0.0, le=1.0)
     origen: Origen = "usuario"
     estado: Estado = "confirmada"
     descripcion: str | None = None

@@ -406,3 +406,42 @@ en el orden), `vendedores.email` con patrón email y 3 nulos.
 **Detalle.** `length()` no acepta INTEGER en DuckDB: una columna de texto
 toda nula en un test de tabla armada a mano llegaba como INTEGER; se castea
 a VARCHAR antes de medir el largo.
+
+## 2026-09-09 — Fase 2, paso 10: heurísticas de claves, relaciones y tipos (v0.10.01)
+
+`app/inferencia/heuristicas.py` arma el modelo propuesto entero desde los
+perfiles y una conexión DuckDB. La primera versión medía la inclusión por
+valores distintos y se perdía la relación `ventas.vendedor →
+vendedores.id_vendedor`: el id huérfano 99 es un solo valor distinto entre
+13 (92 %), aunque sean el 2 % de las filas. Se pasó a inclusión por filas
+(98 %) y el criterio de aceptación de la fase 2 (4 de 4 relaciones, 5 de 5
+claves, sin intervención) quedó cubierto por `tests/test_heuristicas.py`.
+
+El segundo problema fue el ruido: `cantidad` (1 a 6) y `cuotas` (1 a 12)
+"caben" al 100 % en cualquier tabla con ids chicos, y `pagos.id_medio_pago`
+cabía también en productos, vendedores y ventas. Filtros que quedaron: sin
+nombre a favor, la columna no puede parecer una medida y tiene que cubrir
+al menos la mitad de las claves destino; y una columna con una relación
+clara (≥ 0.9) pierde sus candidatas sin nombre similar. Con eso la
+propuesta sobre los 5 CSV tiene exactamente las 4 relaciones reales.
+
+`fusion.py` mezcla la propuesta con el modelo trabajado. Probado en el
+navegador contra la demo (que tiene el modelo a mano, todo confirmado)
+apareció un bug real: el modelo a mano llama `id_vendedor` al campo de la
+columna `vendedor`, la propuesta lo llama `vendedor`, y la relación
+propuesta apuntaba a un campo inexistente y chocaba por id con la
+confirmada. Ahora la fusión traduce las referencias de la propuesta a los
+ids del modelo existente antes de mezclar y desambigua ids repetidos.
+Sobre la demo, reproponer produjo la versión 5 con todo lo confirmado
+intacto y 4 métricas nuevas propuestas.
+
+También: `Campo.evidencia` y `Metrica.confianza` en el esquema (defaults
+compatibles con los JSON viejos), `guardar_version` compartido por la carga
+de JSON y la propuesta, `POST /modelo/proponer` y el botón "Proponer
+modelo" en Fuentes (deshabilitado mientras haya ingestas corriendo, con
+aviso, polling y link a Modelo).
+
+**Detalle de entorno.** El navegador embebido perdió la cookie de sesión en
+una navegación completa después del login por formulario; loguearse con
+`fetch` desde la consola y recién después navegar funcionó. No es un
+problema de la app (curl y los tests de API confirman el flujo).

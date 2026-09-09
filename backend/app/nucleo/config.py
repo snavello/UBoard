@@ -41,6 +41,12 @@ class Configuracion(BaseSettings):
     # proceso anterior. Los tests lo apagan porque migran su propia base.
     recuperar_tareas_al_arrancar: bool = True
 
+    # Heuristicas de inferencia (fase 2): una columna es clave foranea si al
+    # menos esta fraccion de sus valores distintos existe en la clave primaria
+    # destino; dos nombres se consideran "similares" desde este ratio de difflib.
+    umbral_inclusion_fk: float = 0.95
+    umbral_similitud_nombre: float = 0.8
+
     # local | pruebas | demo | prod
     entorno: str = "local"
 

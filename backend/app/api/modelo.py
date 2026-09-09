@@ -7,13 +7,16 @@ from fastapi import APIRouter, Body, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.tareas import TareaSalida, a_tarea_salida
 from app.api.workspaces import workspace_del_usuario
 from app.catalogo.sesion import obtener_sesion
 from app.catalogo.tablas import RolUsuario, Usuario, VersionModelo, Workspace
+from app.inferencia.tarea import TIPO_TAREA_PROPONER_MODELO
 from app.modelo import operaciones
 from app.modelo.validacion import modelo_efectivo, parsear_modelo, validar_contra_fuentes, validar_estructura
 from app.nucleo.auth import exigir_rol
 from app.nucleo.errores import ErrorApp
+from app.tareas import ColaTareas, encolar_tarea, obtener_cola
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/modelo", tags=["modelo"])
 
@@ -90,6 +93,20 @@ def validar_modelo(
     if not errores:
         errores = validar_contra_fuentes(modelo, operaciones.esquemas_del_workspace(sesion, workspace))
     return ResultadoValidacion(valido=not errores, errores=[error.como_dict() for error in errores], resumen=modelo.resumen())
+
+
+@router.post("/proponer", response_model=TareaSalida, status_code=status.HTTP_202_ACCEPTED)
+def proponer_modelo(
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+    cola: ColaTareas = Depends(obtener_cola),
+) -> TareaSalida:
+    """Encola la inferencia heuristica (fase 2): claves, relaciones, tipos
+    semanticos, metricas obvias. Se fusiona con el modelo actual respetando
+    lo confirmado y lo rechazado, y crea una version nueva. 202 + tarea."""
+    tarea = encolar_tarea(sesion, cola, tipo=TIPO_TAREA_PROPONER_MODELO, parametros={}, workspace=workspace, usuario=usuario)
+    return a_tarea_salida(tarea)
 
 
 @router.get("/versiones", response_model=list[VersionResumen])
