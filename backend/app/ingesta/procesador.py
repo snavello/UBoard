@@ -20,6 +20,7 @@ from app.ingesta.lector_csv import TablaCruda, cargar_csv
 from app.ingesta.lector_excel import cargar_excel
 from app.ingesta.tipado import TAMANIO_MUESTRA, columna_sql, decidir_tipo, expresion_limpia, expresion_sql
 from app.nucleo.errores import ErrorApp
+from app.perfilado import perfilar
 
 EXTENSIONES_CSV = {".csv", ".txt", ".tsv"}
 EXTENSIONES_EXCEL = {".xlsx", ".xlsm"}
@@ -45,6 +46,8 @@ class ResultadoTabla:
     filas: int
     ruta_parquet_temporal: Path
     opciones: dict
+    # PerfilFuente serializado (perfilado/perfil.py), calculado sobre el Parquet
+    perfil: dict = field(default_factory=dict)
 
     def esquema_como_dicts(self) -> list[dict]:
         return [asdict(columna) for columna in self.esquema]
@@ -126,6 +129,14 @@ def _tipar_y_escribir(
     ruta_parquet = directorio_temporal / f"{relacion}.parquet"
     conexion.execute(f"COPY (SELECT {seleccion} FROM {relacion}) TO '{ruta_parquet.as_posix()}' (FORMAT PARQUET)")
 
+    # El perfil se calcula sobre el Parquet ya tipado, no sobre el VARCHAR crudo
+    perfil = perfilar(
+        conexion,
+        f"read_parquet('{ruta_parquet.as_posix()}')",
+        nombre_tabla,
+        [(columna.nombre, columna.tipo) for columna in esquema],
+    )
+
     return ResultadoTabla(
         nombre_tabla=nombre_tabla,
         hoja=hoja,
@@ -134,6 +145,7 @@ def _tipar_y_escribir(
         filas=total,
         ruta_parquet_temporal=ruta_parquet,
         opciones=tabla.opciones,
+        perfil=perfil.model_dump(mode="json"),
     )
 
 
@@ -177,6 +189,7 @@ def registrar_fuentes(
         fuente.filas = resultado.filas
         fuente.huella = calcular_huella(resultado.nombre_tabla, esquema)
         fuente.opciones = resultado.opciones
+        fuente.perfil = resultado.perfil
         fuente.ruta_original = ruta_original
         fuente.estado = EstadoFuente.LISTA
         fuente.error = None

@@ -73,8 +73,36 @@ export interface Fuente {
   error: string | null;
   columnas: ColumnaFuente[];
   opciones: Record<string, unknown>;
+  perfilada: boolean;
   creada_en: string;
   actualizada_en: string;
+}
+
+export interface TopValor {
+  valor: unknown;
+  cantidad: number;
+}
+
+export interface PerfilColumna {
+  nombre: string;
+  tipo: string;
+  nulos: number;
+  distintos: number;
+  unica: boolean;
+  minimo: unknown;
+  maximo: unknown;
+  promedio: number | null;
+  longitud_minima: number | null;
+  longitud_maxima: number | null;
+  top_valores: TopValor[];
+  patron: string | null;
+}
+
+export interface PerfilFuente {
+  nombre_tabla: string;
+  filas: number;
+  columnas: PerfilColumna[];
+  candidatas_clave: string[];
 }
 
 export interface Muestra {

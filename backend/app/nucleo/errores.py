@@ -40,6 +40,7 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-ING-03": (400, "El archivo no tiene filas con datos."),
     "E-ING-04": (404, "No encontramos esa fuente."),
     "E-ING-05": (400, "Formato no soportado: subí un .csv, .txt, .tsv, .xlsx o .xlsm."),
+    "E-ING-06": (404, "Esta fuente no tiene perfil todavía. Volvé a subir el archivo."),
     "E-MOD-01": (422, "El modelo tiene errores. Revisá el detalle y volvé a cargarlo."),
     "E-MOD-02": (404, "Este workspace todavía no tiene un modelo cargado."),
     "E-MOD-03": (404, "No existe esa versión del modelo."),

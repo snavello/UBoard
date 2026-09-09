@@ -17,3 +17,8 @@
 .tipo { color: var(--mudo); }
 .invalidos { color: var(--advertencia); }
 .muestra { overflow-x: auto; border-top: 1px solid var(--linea); padding-top: 8px; }
+.perfil { display: flex; flex-direction: column; gap: 10px; overflow-x: auto; border-top: 1px solid var(--linea); padding-top: 8px; }
+.nombreColumna { font-family: var(--fuente-mono); margin-right: 8px; }
+.conNulos { color: var(--advertencia); }
+.rango { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.frecuentes { display: flex; flex-wrap: wrap; gap: 4px; max-width: 420px; }

@@ -9,7 +9,7 @@ import { Cargando } from "../compartido/componentes/Cargando";
 import { Marco } from "../compartido/componentes/Marco";
 import { formatearCelda, formatearFecha, formatearNumero } from "../compartido/formato";
 import { useSesion } from "../compartido/sesion";
-import type { Fuente, Muestra, Tarea } from "../tipos";
+import type { Fuente, Muestra, PerfilFuente, Tarea } from "../tipos";
 import estilos from "./Fuentes.module.css";
 
 const EXTENSIONES = ".csv,.txt,.tsv,.xlsx,.xlsm";
@@ -136,6 +136,12 @@ function TareaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: numbe
 
 function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceId: number; fuente: Fuente; onBorrar: () => void; borrando: boolean }) {
   const [verMuestra, setVerMuestra] = useState(false);
+  const [verPerfil, setVerPerfil] = useState(false);
+  const perfil = useQuery({
+    queryKey: ["perfil", workspaceId, fuente.id, fuente.huella, fuente.actualizada_en],
+    queryFn: () => pedir<PerfilFuente>(rutaWorkspace(workspaceId, `/fuentes/${fuente.id}/perfil`)),
+    enabled: verPerfil,
+  });
   const muestra = useQuery({
     queryKey: ["muestra", workspaceId, fuente.id, fuente.huella],
     queryFn: () => pedir<Muestra>(rutaWorkspace(workspaceId, `/fuentes/${fuente.id}/muestra?filas=8`)),
@@ -156,6 +162,9 @@ function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceI
           </span>
         </div>
         <div className={estilos.acciones}>
+          <button type="button" className="boton boton--chico" onClick={() => setVerPerfil((valor) => !valor)} disabled={!fuente.perfilada} title={fuente.perfilada ? undefined : "Volvé a subir el archivo para calcular el perfil"}>
+            {verPerfil ? "Ocultar perfil" : "Ver perfil"}
+          </button>
           <button type="button" className="boton boton--chico" onClick={() => setVerMuestra((valor) => !valor)}>
             {verMuestra ? "Ocultar muestra" : "Ver muestra"}
           </button>
@@ -172,6 +181,9 @@ function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceI
           </li>
         ))}
       </ul>
+      {verPerfil && perfil.isPending && <Cargando chico texto="Leyendo el perfil…" />}
+      {verPerfil && perfil.isError && <AvisoError error={perfil.error} />}
+      {verPerfil && perfil.data && <TablaPerfil perfil={perfil.data} />}
       {verMuestra && muestra.isPending && <Cargando chico texto="Leyendo filas…" />}
       {verMuestra && muestra.isError && <AvisoError error={muestra.error} />}
       {verMuestra && muestra.data && (
@@ -202,4 +214,62 @@ function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceI
       )}
     </article>
   );
+}
+
+const ETIQUETA_PATRON: Record<string, string> = { email: "emails", url: "URLs", numerico: "solo dígitos", codigo: "códigos" };
+
+/* Estadisticas por columna calculadas en la ingesta. Es la evidencia que
+   despues usan las heuristicas de claves y relaciones, mostrada tal cual. */
+function TablaPerfil({ perfil }: { perfil: PerfilFuente }) {
+  const candidatas = new Set(perfil.candidatas_clave);
+  return (
+    <div className={estilos.perfil}>
+      <p className="secundario">
+        {formatearNumero(perfil.filas, 0)} filas.{" "}
+        {candidatas.size > 0 ? `Candidatas a clave: ${perfil.candidatas_clave.join(", ")}.` : "Ninguna columna sirve como clave: todas repiten valores o tienen nulos."}
+      </p>
+      <table className="tabla">
+        <thead>
+          <tr>
+            <th>Columna</th>
+            <th>Tipo</th>
+            <th className="numero">Nulos</th>
+            <th className="numero">Distintos</th>
+            <th>Mín · máx</th>
+            <th>Valores frecuentes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {perfil.columnas.map((columna) => (
+            <tr key={columna.nombre}>
+              <td>
+                <span className={estilos.nombreColumna}>{columna.nombre}</span>
+                {candidatas.has(columna.nombre) && <span className="pastilla pastilla--acento">clave candidata</span>}
+              </td>
+              <td>
+                {columna.tipo}
+                {columna.patron && <span className="mudo"> · {ETIQUETA_PATRON[columna.patron] ?? columna.patron}</span>}
+              </td>
+              <td className={`numero${columna.nulos > 0 ? ` ${estilos.conNulos}` : ""}`}>{formatearNumero(columna.nulos, 0)}</td>
+              <td className="numero">{formatearNumero(columna.distintos, 0)}</td>
+              <td className={estilos.rango}>{rangoDe(columna.tipo, columna.minimo, columna.maximo, columna.longitud_minima, columna.longitud_maxima)}</td>
+              <td className={estilos.frecuentes}>
+                {columna.top_valores.slice(0, 5).map((top) => (
+                  <span key={String(top.valor)} className="pastilla" title={`${formatearNumero(top.cantidad, 0)} filas`}>
+                    {formatearCelda(top.valor, columna.tipo)} <span className="mudo">×{formatearNumero(top.cantidad, 0)}</span>
+                  </span>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function rangoDe(tipo: string, minimo: unknown, maximo: unknown, largoMin: number | null, largoMax: number | null): string {
+  if (tipo === "texto") return largoMin == null || largoMax == null ? "—" : `${largoMin} a ${largoMax} caracteres`;
+  if (minimo == null || maximo == null) return "—";
+  return `${formatearCelda(minimo, tipo)} · ${formatearCelda(maximo, tipo)}`;
 }

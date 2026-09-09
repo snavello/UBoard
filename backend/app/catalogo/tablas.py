@@ -179,6 +179,8 @@ class Fuente(Base):
     ruta_original: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # Como se leyo el archivo: codificacion, delimitador, filas saltadas, hoja
     opciones: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    # PerfilFuente (perfilado/perfil.py); None en fuentes ingestadas antes del paso 9
+    perfil: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     estado: Mapped[EstadoFuente] = mapped_column(_enum_por_valor(EstadoFuente, "estado_fuente"), default=EstadoFuente.LISTA)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

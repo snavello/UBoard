@@ -374,3 +374,35 @@ ingestó: el contenedor tiene su volumen y el uvicorn local su carpeta
 `datos/almacen`. Si se alterna entre los dos contra el mismo Postgres, hay que
 volver a correr `cargar_prueba.py` para que las fuentes apunten a archivos que
 ese proceso pueda leer (el catálogo es uno, los archivos no).
+
+## 2026-09-09 — Fase 1 aceptada; arranque de la fase 2
+
+Sd aceptó la fase 1 ("ok. que sigue?") y pidió avanzar. Se presentó la
+lectura, las 15 dudas, las decisiones y el plan de 7 pasos de la fase 2 en
+`docs/fase2-lectura-y-plan.md`; Sd respondió las dudas de a una (resumen en
+el §7 de ese documento). Lo más condicionante: tope de gasto de USD 10 en
+la API de Anthropic para toda la fase, y que la clave la pone Sd en el
+`.env` (Claude Code no la escribe en ningún archivo). Sd la pegó en el chat
+y va a rotarla cuando termine de probar.
+
+## 2026-09-09 — Fase 2, paso 9: perfilado (v0.9.01)
+
+`app/perfilado/perfil.py`: `perfilar` recibe una conexión DuckDB y la
+relación a leer (`read_parquet(...)` en la ingesta, una vista en tests) y
+devuelve `PerfilFuente`: por columna nulos, distintos, `unica`, mín/máx,
+promedio, largos, 10 valores frecuentes y patrón de texto; por tabla filas
+y candidatas a clave. Se calcula en `_tipar_y_escribir` sobre el Parquet ya
+tipado (así el mínimo de una fecha es una fecha y no un texto) y viaja en
+`ResultadoTabla.perfil` hasta `fuente.perfil` (migración `3b453523b1e8`,
+nullable para las fuentes viejas). Endpoint `GET /fuentes/{id}/perfil` y
+botón "Ver perfil" en Fuentes con la tabla de estadísticas y la pastilla
+"clave candidata".
+
+Sobre los 5 CSV el perfil ya muestra la evidencia que necesita el paso 10:
+`ventas.id_venta` única (candidata), `ventas.vendedor` con 96 nulos y máximo
+99 (el huérfano), `productos.nombre` también única (candidata, pero segunda
+en el orden), `vendedores.email` con patrón email y 3 nulos.
+
+**Detalle.** `length()` no acepta INTEGER en DuckDB: una columna de texto
+toda nula en un test de tabla armada a mano llegaba como INTEGER; se castea
+a VARCHAR antes de medir el largo.

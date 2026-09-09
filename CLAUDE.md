@@ -10,7 +10,8 @@ el sistema infiere estructura, semántica y relaciones, arma un **modelo
 semántico** y desde él propone un **dashboard** (filtros, KPIs, gráficos,
 explorador por pestañas), modificable por wizard o por lenguaje natural.
 Especificación rectora: [`docs/especificacion-v1.md`](docs/especificacion-v1.md).
-Lectura y plan de la fase 1: [`docs/fase1-lectura-y-plan.md`](docs/fase1-lectura-y-plan.md).
+Lectura y plan de la fase 1: [`docs/fase1-lectura-y-plan.md`](docs/fase1-lectura-y-plan.md);
+de la fase 2: [`docs/fase2-lectura-y-plan.md`](docs/fase2-lectura-y-plan.md).
 
 Principios que no se negocian: el modelo semántico es el producto (nada
 referencia columnas crudas); dos artefactos declarativos versionados
@@ -61,7 +62,8 @@ backend/
     consultas/      # motor (DuckDB por workspace), esquema (ConsultaSemantica), compilador (SQL), ejecutor
     modelo/         # esquema (Pydantic), validacion (3 capas + efectivo), operaciones (versiones)
     dashboard/      # esquema del spec, validacion (compila paneles), filtros, paneles, operaciones
-    perfilado/ inferencia/ asociativo/ asistente/  # fases 2 a 4
+    perfilado/      # perfil por columna y tabla (PerfilFuente), calculado en la ingesta
+    inferencia/ asociativo/ asistente/  # fases 2 a 4
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
   tests/            # pytest; correr por archivo
@@ -122,6 +124,28 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
   sintéticos con suciedad típica (`scripts/generar_datos_prueba.py`).
 - Sin pandas: la ingesta usa DuckDB (`sniff_csv`, `COPY TO parquet`),
   charset-normalizer para encoding, openpyxl + pyarrow para Excel.
+
+Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` §7):
+- Claude solo para lo semántico; claves y relaciones las deciden los datos.
+  Cuenta de API de Sd con **tope de USD 10** para toda la fase: dos llamadas
+  por workspace, muestra de 30 filas por tabla (`ENVIAR_MUESTRA_LLM` la apaga),
+  caché por huella en tabla `inferencia` con tokens consumidos.
+  `MODELO_CLAUDE` por defecto `claude-sonnet-5`. La clave la pone Sd en el
+  `.env`; Claude Code nunca la escribe.
+- Tests sin red (cliente LLM falso); test en vivo que se salta sin clave.
+- Inferencia a pedido (botón "Proponer modelo"), con aviso al terminar las
+  ingestas y botón deshabilitado mientras haya ingestas corriendo.
+- Reinferir **fusiona**: respeta lo confirmado y lo rechazado.
+- Todas las operaciones granulares del §4 en esta fase (`POST
+  /modelo/operaciones`, una versión por operación); deshacer en la fase 3.
+- El editor JSON queda como pestaña "Avanzado"; el wizard es la pantalla
+  principal, con "Confirmar todo lo verde" por sección.
+- Spec inicial: generador determinista curado por Claude; sin Claude se
+  guarda el base.
+- Sin SSE en esta fase; expresiones aritméticas libres en la fase 3.
+- Umbrales: PK = 100 % únicos sin nulos; FK = inclusión ≥ 95 % + tipo igual
+  + n:1, confianza 0.7 + 0.2 nombre similar + 0.05 inclusión total; solo
+  ≥ 0.9 entra sin confirmar.
 
 ## Estado por fase
 - **Fase 1 — Cimientos, sin IA: EN CURSO.** Plan de 9 pasos en
@@ -188,8 +212,17 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     responde con y sin filtros como visualizador. Checklist con evidencia en
     [`docs/fase1-aceptacion.md`](docs/fase1-aceptacion.md). 244 tests
     backend + 7 de vitest.
-  - **Fase 1 completa, pendiente de la aceptación de Sd.**
-- Fases 2, 3 y 4: no empezadas.
+  - **Fase 1 aceptada por Sd el 2026-09-09.**
+- **Fase 2 — Inferencia y wizard: EN CURSO.** Plan de 7 pasos (9 a 15) en
+  `docs/fase2-lectura-y-plan.md`.
+  - Paso 9 (perfilado): HECHO 2026-09-09 (v0.9.01). `app/perfilado/`
+    (`perfilar` puro sobre DuckDB, `PerfilFuente`); se calcula en la ingesta
+    sobre el Parquet tipado y queda en `fuente.perfil` (migración
+    `3b453523b1e8`); `GET /fuentes/{id}/perfil` (E-ING-06 si no hay);
+    `perfilada` en la salida de fuente; "Ver perfil" en Fuentes. 8 tests
+    puros + 2 de API (247 en total).
+  - Pasos 10 a 15: pendientes.
+- Fases 3 y 4: no empezadas.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -269,6 +302,21 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - La subida responde **202 con las tareas** (una por archivo) y el original
   queda en `subidas/{token}/{nombre_seguro}` para reprocesar; el frontend
   hace polling y después lista las fuentes.
+
+## Reglas del perfilado (vigentes desde el paso 9)
+- `perfilar(conexion, relacion, nombre_tabla, columnas)` es puro y corre
+  dentro de `_tipar_y_escribir` sobre el Parquet recién escrito: una pasada
+  de agregados para todas las columnas (no nulos, distintos, mín/máx en
+  numéricas y temporales, promedio en numéricas, largo mín/máx en texto) y
+  una consulta por columna para los 10 valores más frecuentes. Todo sale
+  listo para JSON (fechas ISO, Decimal → float).
+- `unica` = sin nulos y distintos == filas; `candidatas_clave` = únicas de
+  tipo entero o texto (un decimal nunca es clave), en el orden del esquema.
+- Patrón de texto (`email`, `url`, `numerico`, `codigo`) si lo cumple el
+  90 % de hasta 200 valores distintos; sirve al tipado semántico del paso 10.
+- El perfil vive en `fuente.perfil` (JSONB nullable): una fuente ingestada
+  antes del paso 9 no lo tiene y el endpoint responde E-ING-06 hasta que se
+  resuba. El frontend lo pide con la huella y `actualizada_en` en la clave.
 
 ## Reglas del modelo semántico (vigentes desde el paso 4)
 - **Referencias**: `Entidad.fuente` = `nombre_tabla` de la fuente ingestada;

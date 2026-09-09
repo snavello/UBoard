@@ -185,3 +185,44 @@ def test_borrar_fuente(cliente, datos, cola, almacen_temporal, ingresar):
     assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json() == []
     assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}").status_code == 404
     assert almacen_temporal.listar() == []  # parquet y original borrados
+
+
+def test_perfil_de_fuente(cliente, datos, cola, ingresar):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    _procesar(cliente, cola, workspace_id, "ventas.csv", CSV_VENTAS)
+    fuente = cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()[0]
+    assert fuente["perfilada"] is True
+
+    respuesta = cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/perfil")
+    assert respuesta.status_code == 200, respuesta.text
+    perfil = respuesta.json()
+    assert perfil["nombre_tabla"] == "ventas" and perfil["filas"] == 2
+    assert perfil["candidatas_clave"] == ["id_venta"]
+    por_nombre = {columna["nombre"]: columna for columna in perfil["columnas"]}
+    assert por_nombre["id_venta"]["unica"] is True
+    assert por_nombre["fecha"]["minimo"] == "2026-01-05" and por_nombre["fecha"]["maximo"] == "2026-01-06"
+    assert por_nombre["importe"]["promedio"] == 15.25
+    assert por_nombre["importe"]["top_valores"] == [{"valor": 10.5, "cantidad": 1}, {"valor": 20.0, "cantidad": 1}]
+
+    # El visualizador tambien puede verlo (es lectura); otra organizacion, no
+    ingresar("visualizador@acme.test")
+    assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/perfil").status_code == 200
+    ingresar("constructor@beta.test")
+    assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/perfil").status_code == 404
+
+
+def test_fuente_sin_perfil_responde_e_ing_06(cliente, datos, cola, ingresar, sesion_db):
+    from app.catalogo.tablas import Fuente
+
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    _procesar(cliente, cola, workspace_id, "ventas.csv", CSV_VENTAS)
+    fuente = cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()[0]
+    fila = sesion_db.get(Fuente, fuente["id"])
+    fila.perfil = None  # como una fuente ingestada antes del paso 9
+    sesion_db.commit()
+    assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()[0]["perfilada"] is False
+    respuesta = cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/perfil")
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "E-ING-06"

@@ -22,6 +22,7 @@ from app.ingesta.tarea import TIPO_TAREA_INGESTA
 from app.nucleo.auth import exigir_rol
 from app.nucleo.config import obtener_configuracion
 from app.nucleo.errores import ErrorApp
+from app.perfilado import PerfilFuente
 from app.tareas import ColaTareas, encolar_tarea, obtener_cola
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/fuentes", tags=["fuentes"])
@@ -50,6 +51,7 @@ class FuenteSalida(BaseModel):
     error: str | None
     columnas: list[ColumnaSalida]
     opciones: dict[str, Any]
+    perfilada: bool
     creada_en: datetime
     actualizada_en: datetime
 
@@ -75,6 +77,7 @@ def a_fuente_salida(fuente: Fuente) -> FuenteSalida:
         error=fuente.error,
         columnas=[ColumnaSalida(**columna) for columna in fuente.esquema],
         opciones=fuente.opciones or {},
+        perfilada=bool(fuente.perfil),
         creada_en=fuente.creada_en,
         actualizada_en=fuente.actualizada_en,
     )
@@ -160,6 +163,14 @@ def muestra_de_fuente(
         conexion.close()
     tipos = {columna["nombre"]: columna["tipo"] for columna in fuente.esquema}
     return MuestraSalida(columnas=columnas, tipos=[tipos.get(columna, "texto") for columna in columnas], filas=datos, total=fuente.filas)
+
+
+@router.get("/{fuente_id}/perfil", response_model=PerfilFuente)
+def perfil_de_fuente(fuente: Fuente = Depends(fuente_del_workspace)) -> PerfilFuente:
+    """Estadisticas por columna calculadas en la ingesta (perfilado, paso 9)."""
+    if not fuente.perfil:
+        raise ErrorApp("E-ING-06", f"fuente: {fuente.nombre_tabla}")
+    return PerfilFuente.model_validate(fuente.perfil)
 
 
 @router.delete("/{fuente_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[solo_constructor])
