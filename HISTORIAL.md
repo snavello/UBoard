@@ -346,3 +346,31 @@ el motor (`wsl -l -v` mostraba `docker-desktop Stopped` y `docker info`
 colgaba); hizo falta matar sus procesos, `wsl --shutdown` y relanzarlo.
 Además un uvicorn lanzado con `&` desde el Bash de Claude no sobrevive al
 final de la llamada en esta sesión: usar `run_in_background`.
+
+**Verificación completada al día siguiente (2026-09-09).** Con Postgres de
+vuelta: filtro Sucursal = Centro desde el chip (popover con las 3 sucursales,
+URL con `?filtros=`, KPI protagonista de $ 48.320.028 a $ 15.345.842, "Quitar
+filtros" visible); Fuentes lista las 5 fuentes con esquema; Modelo muestra la
+versión actual y el historial; Plataforma (como admin) lista organizaciones y
+administradores. Un ajuste más: las cifras chicas de KPI también partían el
+"$" en dos líneas en la columna angosta (`nowrap` + `clamp`).
+
+## 2026-09-09 — Fase 1, paso 8: integración y aceptación (v0.8.02)
+
+`docker compose up --build`: la imagen compila el frontend en la etapa de
+Node y corre uvicorn en la de Python; el entrypoint aplicó las cuatro
+migraciones sobre el Postgres del compose y la app respondió `/api/salud`
+con la versión correcta. `cargar_prueba.py` contra el contenedor reemplazó
+las 5 fuentes (los Parquet van al volumen `uboard-almacen`, no al disco
+local), cargó modelo v3 y spec v2, y los KPIs cerraron (total ventas = total
+pagado, como debe ser en los datos sintéticos). Como visualizador: KPIs con y
+sin filtros, explorador filtrado (total 1.418 con Centro + primer semestre) y
+`PUT /modelo` → 403. Suite completa en verde: 244 tests backend por archivo y
+7 de vitest. El checklist con evidencia y lo que queda fuera de la fase está
+en `docs/fase1-aceptacion.md`.
+
+**Detalle a recordar.** Los Parquet viven en el almacén del proceso que
+ingestó: el contenedor tiene su volumen y el uvicorn local su carpeta
+`datos/almacen`. Si se alterna entre los dos contra el mismo Postgres, hay que
+volver a correr `cargar_prueba.py` para que las fuentes apunten a archivos que
+ese proceso pueda leer (el catálogo es uno, los archivos no).

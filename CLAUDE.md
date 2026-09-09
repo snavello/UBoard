@@ -182,7 +182,13 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
     Kpis, Grafico, Explorador), `constructor/` (Fuentes, Modelo con editor
     JSON de modelo y spec), `plataforma/`. Verificado en el navegador contra
     el backend real. 7 tests de vitest (formato y filtros en URL).
-  - Paso 8 (integración y aceptación): pendiente.
+  - Paso 8 (integración y aceptación): HECHO 2026-09-09 (v0.8.02).
+    `docker compose up --build` levanta app + postgres, el entrypoint aplica
+    Alembic, `cargar_prueba.py` completa contra el contenedor y el tablero
+    responde con y sin filtros como visualizador. Checklist con evidencia en
+    [`docs/fase1-aceptacion.md`](docs/fase1-aceptacion.md). 244 tests
+    backend + 7 de vitest.
+  - **Fase 1 completa, pendiente de la aceptación de Sd.**
 - Fases 2, 3 y 4: no empezadas.
 
 ## Accesos de la demo local

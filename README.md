@@ -28,9 +28,12 @@ Abrir http://localhost:5173. La API queda en http://localhost:8000/api/docs.
 
 ## Todo en Docker (como producción)
 ```bash
-docker compose up --build
+docker compose up --build -d
+docker compose exec app python scripts/crear_organizacion.py demo
+.venv/Scripts/python.exe backend/scripts/cargar_prueba.py --url http://localhost:8000
 ```
-Abrir http://localhost:8000.
+Abrir http://localhost:8000 e ingresar con los accesos de la demo (ver `CLAUDE.md`).
+El checklist de aceptación de la fase 1 está en `docs/fase1-aceptacion.md`.
 
 ## Tests
 Desde `backend/`, un archivo por vez:
