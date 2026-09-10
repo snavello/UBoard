@@ -565,3 +565,37 @@ dashboard". Claude tituló "Panel de ventas", puso "Total de ventas" como
 protagonista ($ 48.320.028, el mismo total que en la aceptación de la fase
 1) y tituló el gráfico de línea "Cobros por mes". La demo (workspace 1) no
 se tocó: sigue en la versión 3 de su spec, "Ventas del almacén".
+
+## 2026-09-10 — Fase 2, paso 15: integración y aceptación (v0.15.01)
+
+`backend/scripts/cargar_prueba.py` gana `--inferir`: en vez de cargar
+`modelo.json`/`spec.json` a mano, pide `/modelo/proponer`, confirma todo lo
+que quedó propuesto con `confirmar_todo` y `minimo_confianza: 0` (el
+equivalente automático de revisar el wizard), y pide `/dashboard/proponer`.
+Es la forma de reproducir por script la aceptación de la fase 2, igual que
+el script sin `--inferir` reproduce la de la fase 1. De paso, una
+`UnicodeEncodeError` real: la consola de Windows a veces arranca en
+cp1252 y el resumen de `confirmar_todo` lleva un "≥"; `sys.stdout.reconfigure
+(encoding="utf-8")` al principio del script.
+
+Corrida de referencia contra una organización descartable (borrada al
+terminar): 5 entidades y 4 relaciones sin intervención (0.90 a 0.95 de
+confianza, ninguna falsa), Claude usado (15.250 tokens la primera vez, caché
+la segunda), dashboard "Panel de ventas y cobros" con 8 KPIs, 4 gráficos y 5
+pestañas, sin advertencias. El checklist completo con la evidencia quedó en
+`docs/fase2-aceptacion.md`.
+
+**Docker no se pudo reconstruir esta sesión.** `docker compose up --build`
+falló tres veces seguidas: `npm ci` cortado con `ECONNRESET` a los 30-45
+segundos, siempre en la etapa del frontend (`pip`, en paralelo, sí bajaba de
+PyPI sin problema). Se agregaron reintentos y timeouts más generosos a `npm
+ci` en el `Dockerfile` (mejora legítima, se queda aunque no haya resuelto el
+corte de esta sesión). Es un problema de red del entorno donde corrió esta
+sesión, no del código de la fase 2 (el `Dockerfile` es el mismo que se
+aceptó en la fase 1). Toda la verificación de este paso se hizo entonces
+contra `uvicorn` local, que sirve exactamente el mismo código que la imagen.
+Falta confirmar `docker compose up --build` con la red estable, de este lado
+o del de Sd, antes de dar la fase 2 por cerrada del todo en Docker.
+
+**Fase 2 completa, pendiente de la aceptación de Sd** (y de esa
+confirmación en Docker).

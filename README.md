@@ -33,7 +33,11 @@ docker compose exec app python scripts/crear_organizacion.py demo
 .venv/Scripts/python.exe backend/scripts/cargar_prueba.py --url http://localhost:8000
 ```
 Abrir http://localhost:8000 e ingresar con los accesos de la demo (ver `CLAUDE.md`).
-El checklist de aceptación de la fase 1 está en `docs/fase1-aceptacion.md`.
+Para que el modelo y el dashboard salgan de la inferencia (fase 2) en vez de
+`modelo.json`/`spec.json`, agregar `--inferir` a `cargar_prueba.py` (necesita
+`ANTHROPIC_API_KEY` en el `.env`, si no, sigue solo con heurísticas).
+Los checklists de aceptación están en `docs/fase1-aceptacion.md` y
+`docs/fase2-aceptacion.md`.
 
 ## Tests
 Desde `backend/`, un archivo por vez:

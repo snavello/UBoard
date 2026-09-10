@@ -301,7 +301,19 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     punta a punta (proponer modelo, confirmar, proponer dashboard, Claude
     lo tituló "Panel de ventas" con el KPI protagonista correcto). 8 tests
     de generador + 4 de curación + 4 de API (298 en total, más 2 en vivo).
-  - Paso 15 (integración y aceptación de la fase 2): pendiente.
+  - Paso 15 (integración y aceptación): HECHO 2026-09-10 (v0.15.01).
+    `cargar_prueba.py --inferir`: reproduce la fase 2 por script (proponer
+    modelo, confirmar todo con `minimo_confianza: 0`, proponer dashboard)
+    contra un servidor corriendo. Checklist con evidencia en
+    [`docs/fase2-aceptacion.md`](docs/fase2-aceptacion.md): 5/5 claves,
+    4/4 relaciones sin intervención, dashboard curado con 8 KPIs y 4
+    gráficos. `docker compose up --build` no se pudo reconstruir esta
+    sesión (`npm ci` cortado por la red del entorno, no por el código: ver
+    el incidente en el checklist); la verificación completa se hizo contra
+    `uvicorn` local con el mismo código. Pendiente confirmar Docker con red
+    estable.
+  - **Fase 2 completa, pendiente de la aceptación de Sd** (y de rehacer
+    `docker compose up --build` cuando la red lo permita).
 - Fases 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -646,6 +658,9 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   (escribe `datos_prueba/`; ver su README para la suciedad de cada archivo).
 - Cargar todo en un servidor corriendo (CSV + modelo + spec, como el constructor
   de la demo): `.venv/Scripts/python.exe backend/scripts/cargar_prueba.py [--url http://localhost:8000]`.
+  Con `--inferir`, en vez de `modelo.json`/`spec.json` pide la propuesta real
+  (heurísticas + Claude) y confirma todo: es como reproducir la aceptación de
+  la fase 2 por script (`docs/fase2-aceptacion.md`).
 - Tests (desde `backend/`): `for f in tests/test_*.py; do ../.venv/Scripts/python.exe -m pytest "$f" || break; done`
 - Tests del frontend: `cd frontend && npx vitest run` (y `npm run build` corre `tsc -b`).
 - Todo en Docker como producción: `docker compose up --build`.

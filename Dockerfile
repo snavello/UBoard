@@ -5,7 +5,10 @@
 FROM node:24-alpine AS frontend
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# El registro de npm a veces corta la conexion a mitad de descarga (mas que
+# pip o un wget comun): reintentos y timeouts mas generosos que los default.
+RUN npm config set fetch-retries 5 fetch-retry-mintimeout 5000 fetch-retry-maxtimeout 60000 fetch-timeout 120000 \
+    && npm ci --no-audit --no-fund
 COPY frontend/ ./
 # vite.config.ts escribe en ../backend/app/estatico => /backend/app/estatico
 RUN npm run build
