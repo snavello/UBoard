@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.catalogo.tablas import Usuario, VersionModelo, Workspace
 from app.consultas.motor import fuentes_listas
+from app.modelo.edicion import aplicar_operacion, parsear_operacion
 from app.modelo.esquema import ModeloSemantico
 from app.modelo.validacion import exigir_valido, parsear_modelo, validar_contra_fuentes, validar_estructura
 from app.nucleo.errores import ErrorApp
@@ -70,8 +71,30 @@ def cargar_modelo(sesion: Session, workspace: Workspace, contenido: Any, usuario
     return guardar_version(sesion, workspace, modelo, operacion=OPERACION_CARGAR_JSON, autor_id=usuario.id if usuario else None)
 
 
+def aplicar_y_guardar(sesion: Session, workspace: Workspace, contenido_operacion: Any, usuario: Usuario | None) -> VersionModelo:
+    """Una operacion granular del wizard o del chat: se aplica sobre la version
+    actual, se validan las tres capas y queda una version nueva con el nombre
+    de la operacion y su resumen. Sin modelo cargado, E-MOD-02."""
+    operacion = parsear_operacion(contenido_operacion)
+    actual = exigir_version_actual(sesion, workspace)
+    modelo, resumen = aplicar_operacion(modelo_de(actual), operacion)
+    errores = validar_estructura(modelo)
+    if not errores:
+        errores = validar_contra_fuentes(modelo, esquemas_del_workspace(sesion, workspace))
+    exigir_valido(errores)
+    return guardar_version(
+        sesion, workspace, modelo, operacion=operacion.operacion, autor_id=usuario.id if usuario else None, resumen=resumen
+    )
+
+
 def guardar_version(
-    sesion: Session, workspace: Workspace, modelo: ModeloSemantico, *, operacion: str, autor_id: int | None
+    sesion: Session,
+    workspace: Workspace,
+    modelo: ModeloSemantico,
+    *,
+    operacion: str,
+    autor_id: int | None,
+    resumen: str | None = None,
 ) -> VersionModelo:
     """Nueva fila en version_modelo con el modelo YA validado, el numero
     siguiente y el diff contra la version anterior. La comparten la carga de
@@ -85,7 +108,7 @@ def guardar_version(
         contenido=modelo.model_dump(mode="json"),
         operacion=operacion,
         diff=calcular_diff(modelo_de(anterior), modelo) if anterior else None,
-        resumen=modelo.resumen(),
+        resumen=(resumen or modelo.resumen())[:300],
         autor_id=autor_id,
     )
     sesion.add(version)

@@ -44,6 +44,8 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-MOD-01": (422, "El modelo tiene errores. Revisá el detalle y volvé a cargarlo."),
     "E-MOD-02": (404, "Este workspace todavía no tiene un modelo cargado."),
     "E-MOD-03": (404, "No existe esa versión del modelo."),
+    "E-MOD-04": (400, "Operación desconocida o con parámetros inválidos."),
+    "E-MOD-05": (400, "Esa operación no se puede aplicar sobre el modelo actual."),
     "E-INF-01": (502, "No pudimos consultar a Claude. La propuesta sigue con las heurísticas."),
     "E-INF-02": (400, "No hay fuentes cargadas: subí los archivos antes de proponer el modelo."),
     "E-INF-03": (400, "Hay fuentes sin perfil (se ingestaron con una versión anterior). Volvé a subirlas."),

@@ -65,6 +65,7 @@ backend/
     perfilado/      # perfil por columna y tabla (PerfilFuente), calculado en la ingesta
     inferencia/     # heuristicas (claves, relaciones, tipos, metricas), llm (ClienteLLM real/falso),
                     # semantica (prompt, validacion, aplicar), fusion, tarea
+    modelo/edicion.py  # operaciones granulares del wizard y el chat (§4)
     asociativo/ asistente/  # fases 3 y 4
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
@@ -248,7 +249,22 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     Test en vivo `tests/test_llm_en_vivo.py` (deseleccionado por defecto)
     pasó contra `claude-sonnet-5`: ~8 k tokens de entrada, ~2,5 k de salida.
     5 tests de semántica + 1 de API (273 en total, más 1 en vivo).
-  - Pasos 12 a 15: pendientes.
+  - Paso 12 (operaciones granulares): HECHO 2026-09-09 (v0.12.01).
+    `app/modelo/edicion.py`: 21 operaciones tipadas (Pydantic, discriminador
+    `operacion`) — renombrar/asignar tipo/sinónimos/clave primaria de
+    entidad; renombrar/tipo semántico/confirmar/rechazar de campo;
+    crear/confirmar/rechazar/eliminar relación; crear/editar/eliminar/
+    confirmar/rechazar métrica; agregar/quitar dimensión de tiempo;
+    `confirmar_todo` en bloque (por sección y opcionalmente por entidad).
+    `aplicar_operacion` es pura (copia el modelo, no valida); la API
+    (`POST /modelo/operaciones`) valida las tres capas de siempre y guarda
+    una versión con `operacion` y `diff` (`aplicar_y_guardar`, comparte
+    `guardar_version` con la carga de JSON y la propuesta heurística).
+    `GET /modelo/operaciones` lista los nombres válidos. Errores nuevos
+    `E-MOD-04` (operación inválida) y `E-MOD-05` (no aplicable: clave
+    primaria protegida, relación duplicada, métrica usada por un cociente,
+    etc.). 8 tests puros + 3 de API (296 en total).
+  - Pasos 13 a 15: pendientes.
 - Fases 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -375,6 +391,33 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   a los ids existentes (`ventas.vendedor` → `ventas.id_vendedor`).
 - La tarea falla con E-INF-02 (sin fuentes), E-INF-03 (fuentes sin perfil:
   resubir) o E-INF-04 (la fusión no valida: bug, nunca debería pasar).
+
+## Reglas de las operaciones granulares (vigentes desde el paso 12)
+- Una operación es un dict `{"operacion": "...", ...parámetros}` validado
+  por `TypeAdapter` con discriminador (`app/modelo/edicion.py`); lo que no
+  matchea una operación conocida o le faltan/sobran parámetros es
+  `E-MOD-04` con el detalle campo por campo y la lista de operaciones
+  válidas. `aplicar_operacion(modelo, operacion)` es pura: copia profunda,
+  aplica, devuelve `(modelo, resumen)`; no valida el resultado.
+- Lo que la persona toca a mano queda `origen: usuario` (entidad, campo,
+  relación creada, métrica creada/editada); confirmar o rechazar cambia
+  `estado`, nunca `origen` — la evidencia sigue siendo de quien lo propuso.
+- Guardas de integridad (`E-MOD-05`): no se puede rechazar ni cambiar el
+  tipo semántico de un campo que es clave primaria; no se puede eliminar
+  una métrica que usa un cociente; `marcar_clave_primaria` fuerza
+  `identificador` y `confirmada` en los campos elegidos, pero dejar la
+  clave vieja como campo suelto puede romper una relación que apuntaba
+  ahí (lo detecta la validación de siempre, no esta capa). `crear_relacion`
+  arma el id si no viene, marca la columna origen como `clave_foranea` y
+  confirma la relación; el modelo resultante todavía puede no validar
+  (ciclo, tipos distintos) y ahí responde `E-MOD-01`, no `E-MOD-05`.
+- `confirmar_todo`: confirma lo `propuesta` con confianza ≥ un mínimo (0.9
+  por defecto) en una sección (`campos`, `relaciones`, `metricas`, `todo`)
+  y opcionalmente solo de una entidad; confirmar una relación confirma
+  también sus dos campos si estaban `propuesta`.
+- `POST /modelo/operaciones` reusa las tres capas de validación y
+  `guardar_version` (mismo mecanismo que `PUT /modelo` y la propuesta
+  heurística): una operación mala no dejo rastro, ninguna versión a medias.
 
 ## Reglas de Claude en la inferencia (vigentes desde el paso 11)
 - **Claude solo opina sobre lo semántico**: nombres de entidades y campos,

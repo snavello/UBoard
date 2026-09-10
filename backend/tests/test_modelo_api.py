@@ -256,3 +256,59 @@ def test_proponer_exige_constructor(cliente, datos, ingresar, cola):
     assert cliente.post(f"{_ruta(datos.acme_workspace_id)}/proponer").status_code == 403
     ingresar("constructor@beta.test")
     assert cliente.post(f"{_ruta(datos.acme_workspace_id)}/proponer").status_code == 404
+
+
+def test_operaciones_granulares_crean_versiones(cliente, datos, ingresar, cargar_datos_prueba, modelo_prueba):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+    ruta = f"{_ruta(workspace_id)}/operaciones"
+
+    assert "confirmar_todo" in cliente.get(ruta).json()
+
+    # Sin modelo: E-MOD-02
+    respuesta = cliente.post(ruta, json={"operacion": "renombrar_campo", "entidad": "ventas", "campo": "importe", "nombre": "Monto"})
+    assert respuesta.status_code == 404 and respuesta.json()["codigo"] == "E-MOD-02"
+
+    assert cliente.put(_ruta(workspace_id), json=modelo_prueba).status_code == 201
+
+    respuesta = cliente.post(ruta, json={"operacion": "renombrar_campo", "entidad": "ventas", "campo": "importe", "nombre": "Monto facturado"})
+    assert respuesta.status_code == 201, respuesta.text
+    version = respuesta.json()
+    assert version["numero"] == 2 and version["operacion"] == "renombrar_campo"
+    assert version["resumen"] == "Campo 'ventas.importe' renombrado a 'Monto facturado'"
+    assert version["diff"]["entidades"]["cambiados"] == ["ventas"]
+    assert version["autor_id"] == datos.acme_constructor.id
+    campo = next(c for c in next(e for e in version["contenido"]["entidades"] if e["id"] == "ventas")["campos"] if c["id"] == "importe")
+    assert campo["nombre"] == "Monto facturado" and campo["origen"] == "usuario"
+
+    # Operacion desconocida y parametros invalidos: E-MOD-04, sin version nueva
+    respuesta = cliente.post(ruta, json={"operacion": "volar_todo"})
+    assert respuesta.status_code == 400 and respuesta.json()["codigo"] == "E-MOD-04"
+    respuesta = cliente.post(ruta, json={"operacion": "confirmar_campo", "entidad": "ventas"})
+    assert respuesta.status_code == 400 and respuesta.json()["codigo"] == "E-MOD-04"
+    # No aplicable: E-MOD-05
+    respuesta = cliente.post(ruta, json={"operacion": "rechazar_campo", "entidad": "ventas", "campo": "id_venta"})
+    assert respuesta.status_code == 400 and respuesta.json()["codigo"] == "E-MOD-05"
+    # Aplicable pero el modelo resultante no valida: E-MOD-01 (crear una relacion que cierra un ciclo)
+    respuesta = cliente.post(
+        ruta,
+        json={"operacion": "crear_relacion", "desde": {"entidad": "pagos", "campo": "id_medio_pago"}, "hacia": {"entidad": "productos", "campo": "id_producto"}},
+    )
+    assert respuesta.status_code == 422 and respuesta.json()["codigo"] == "E-MOD-01"
+    assert cliente.get(_ruta(workspace_id)).json()["numero"] == 2, "ninguna de las fallidas creo version"
+
+    # Una metrica nueva se ve en el modelo efectivo enseguida
+    respuesta = cliente.post(
+        ruta,
+        json={"operacion": "crear_metrica", "id": "precio_promedio", "nombre": "Precio promedio", "expresion": {"agregacion": "promedio", "campo": "ventas.precio_unitario"}, "formato": "moneda"},
+    )
+    assert respuesta.status_code == 201 and respuesta.json()["numero"] == 3
+    efectivo = cliente.get(f"{_ruta(workspace_id)}?efectivo=true").json()["contenido"]
+    assert any(m["id"] == "precio_promedio" for m in efectivo["metricas"])
+    versiones = cliente.get(f"{_ruta(workspace_id)}/versiones").json()
+    assert [v["operacion"] for v in versiones] == ["crear_metrica", "renombrar_campo", "cargar_json"]
+
+    # Solo el constructor
+    ingresar("visualizador@acme.test")
+    assert cliente.post(ruta, json={"operacion": "confirmar_todo"}).status_code == 403

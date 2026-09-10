@@ -95,6 +95,27 @@ def validar_modelo(
     return ResultadoValidacion(valido=not errores, errores=[error.como_dict() for error in errores], resumen=modelo.resumen())
 
 
+@router.get("/operaciones", response_model=list[str])
+def listar_operaciones() -> list[str]:
+    """Nombres de las operaciones granulares disponibles (§4)."""
+    from app.modelo.edicion import OPERACIONES
+
+    return list(OPERACIONES)
+
+
+@router.post("/operaciones", response_model=VersionSalida, status_code=status.HTTP_201_CREATED)
+def aplicar_operacion(
+    contenido: dict[str, Any] = Body(..., description='{"operacion": "renombrar_campo", ...parametros}'),
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+) -> VersionSalida:
+    """Una operacion granular (wizard o chat): valida, aplica sobre la version
+    actual y crea una version nueva. E-MOD-04 si la operacion no existe,
+    E-MOD-05 si no se puede aplicar, E-MOD-01 si el modelo resultante no valida."""
+    return _salida(operaciones.aplicar_y_guardar(sesion, workspace, contenido, usuario))
+
+
 @router.post("/proponer", response_model=TareaSalida, status_code=status.HTTP_202_ACCEPTED)
 def proponer_modelo(
     workspace: Workspace = Depends(workspace_del_usuario),

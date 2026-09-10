@@ -481,3 +481,28 @@ visible; con una tarea de 30 segundos la gente cambia de pestaña y volvía a
 sondeos de Fuentes.
 
 Costo acumulado de la fase hasta acá: tres llamadas reales, unos USD 0,15.
+
+## 2026-09-09 — Fase 2, paso 12: operaciones granulares (v0.12.01)
+
+`app/modelo/edicion.py` tipa las 15 operaciones del §4 de la especificación
+más 6 que hacían falta para que el semáforo del wizard cierre (confirmar y
+rechazar campo/métrica, `confirmar_todo` en bloque): 21 en total, con
+`Annotated[Union[...], Field(discriminator="operacion")]` para que Pydantic
+elija la clase correcta por el nombre y reporte errores por operación. Cada
+una es pura: recibe el modelo y sus parámetros, devuelve el modelo
+modificado y un resumen en castellano para la versión.
+
+La API (`POST /modelo/operaciones`) no reinventa nada: aplica la operación
+sobre la versión actual y pasa por las mismas tres capas de validación y el
+mismo `guardar_version` que ya usaban la carga de JSON y la propuesta
+heurística, así que una operación que deja el modelo roto (por ejemplo
+crear una relación que cierra un ciclo) no crea versión, igual que hoy.
+Se sumaron dos códigos de error: `E-MOD-04` para una operación que no
+existe o con parámetros inválidos, `E-MOD-05` para una que sintácticamente
+está bien pero no se puede aplicar (rechazar la clave primaria, eliminar
+una métrica que usa un cociente).
+
+Probado a mano en `test_edicion.py` sobre el modelo escrito y sobre uno
+"propuesto" armado con confianzas mixtas, para que `confirmar_todo`
+tuviera algo interesante que dejar afuera. 8 tests puros y 3 de API sobre
+296 en total.
