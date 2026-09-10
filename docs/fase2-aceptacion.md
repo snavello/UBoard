@@ -1,6 +1,6 @@
 # Fase 2 — Inferencia y wizard: checklist de aceptación
 
-Fecha: 2026-09-10. Versión: 0.15.01. Estado: **lista para que Sd la acepte**.
+Fecha: 2026-09-10. Versión: 0.15.02. Estado: **lista para que Sd la acepte**.
 
 Criterio de la especificación (§9): *subiendo los 5 CSV desde cero, el
 sistema propone el modelo correcto con al menos 80 % de las relaciones
@@ -101,17 +101,40 @@ porque solo se llama cuando el modelo cambia de verdad.
 - SSE para el progreso de las tareas (sigue en polling, funciona bien con
   `refetchIntervalInBackground`).
 
-## Incidente de esta verificación: Docker no se pudo reconstruir
+## Docker: reconstruido y verificado (2026-09-10, más tarde el mismo día)
 
-`docker compose up --build` falló las tres veces que se intentó: `npm ci`
-corta con `ECONNRESET` alrededor de los 30–45 segundos, siempre en la etapa
-del frontend (pip, en paralelo, sí bajaba paquetes de PyPI sin problema, y
-`wget` a `registry.npmjs.org` desde un contenedor también respondía). Es un
-corte de red del entorno donde corrió esta sesión, no del código: el
-`Dockerfile` de la fase 2 es el mismo que ya se aceptó en la fase 1, salvo
-por reintentos de npm que se agregaron ahora (`fetch-retries`) y tampoco
-alcanzaron. Toda la verificación de esta fase se hizo entonces contra
-`uvicorn` local, que corre exactamente el mismo código de la imagen. Falta
-confirmar `docker compose up --build` con red estable antes de dar la fase
-2 por cerrada del todo en Docker; se lo señalo a Sd para que lo pruebe de
-su lado o lo reintente en otra sesión.
+El primer intento de `docker compose up --build` falló tres veces seguidas
+por un corte de red del entorno (`npm ci` con `ECONNRESET`), no por el
+código; quedaron reintentos de npm en el `Dockerfile` por las dudas. A
+pedido de Sd se reintentó más tarde y **la imagen se construyó bien a la
+primera**.
+
+Al correr la aceptación dentro del contenedor apareció un bug real:
+`docker-compose.yml` nunca pasaba `ANTHROPIC_API_KEY` (ni el resto de la
+configuración de Claude) al contenedor `app`, así que la inferencia en
+Docker quedaba siempre en modo heurístico puro, en silencio, sin avisar
+que faltaba la clave. Se agregaron `ANTHROPIC_API_KEY`, `MODELO_CLAUDE`,
+`FILAS_MUESTRA_LLM` y `ENVIAR_MUESTRA_LLM` al servicio `app` (mismo patrón
+`${VAR:-default}` que ya usaban `SECRETO_SESION` y `ENTORNO`).
+
+Corrida de referencia contra el contenedor, con una organización
+descartable (borrada al terminar con `DELETE` directo en el Postgres del
+propio compose):
+
+```
+Proponiendo el modelo (heurísticas + Claude)...
+  modelo versión 3: 5 entidades, 4 relaciones, 12 métricas, 2 dimensiones de tiempo
+  relaciones: pagos.id_medio_pago→medios_pago.id_medio_pago (0.95)
+              pagos.id_venta→ventas.id_venta (0.90)
+              ventas.id_producto→productos.id_producto (0.90)
+              ventas.vendedor→vendedores.id_vendedor (0.90)
+  claude: usado, 15393 tokens
+Proponiendo el dashboard...
+  dashboard versión 2 'Panel de ventas y cobranzas': 4 filtros, 12 KPIs, 3 gráficos, 5 pestañas
+KPIs: Total ventas = 48320027.90 (= Total cobrado, cierra igual que en la fase 1), ...
+```
+
+La demo (workspace 1, `Ventas del almacén`, versión 3 del spec) siguió
+intacta durante toda la prueba: mismo Postgres, misma organización, sin
+tocar. **Docker queda confirmado end to end**, sin pendientes de este
+punto.

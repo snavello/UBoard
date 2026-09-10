@@ -599,3 +599,26 @@ o del de Sd, antes de dar la fase 2 por cerrada del todo en Docker.
 
 **Fase 2 completa, pendiente de la aceptación de Sd** (y de esa
 confirmación en Docker).
+
+## 2026-09-10 (más tarde) — Docker reconstruido y verificado (v0.15.02)
+
+A pedido de Sd se reintentó `docker compose up --build`: esta vez funcionó
+a la primera. Corriendo la aceptación de la fase 2 dentro del contenedor
+apareció un bug real que el checklist con `uvicorn` local no podía detectar:
+`docker-compose.yml` nunca pasaba `ANTHROPIC_API_KEY` (ni `MODELO_CLAUDE`,
+`FILAS_MUESTRA_LLM`, `ENVIAR_MUESTRA_LLM`) al contenedor `app`. En Docker la
+inferencia caía siempre a heurísticas puras, sin ningún error visible —
+`obtener_cliente_llm()` devuelve `None` sin clave y la tarea sigue con
+normalidad, así que nada avisaba que Claude ni se estaba llamando. Se
+agregaron las cuatro variables al servicio `app` con el mismo patrón
+`${VAR:-default}` que ya usaban `SECRETO_SESION` y `ENTORNO`.
+
+Recreado el contenedor, la aceptación completa (`cargar_prueba.py
+--inferir`) corrió de nuevo contra una organización descartable: 5/5 claves,
+4/4 relaciones, Claude usado (15.393 tokens), dashboard "Panel de ventas y
+cobranzas" con 12 KPIs y 3 gráficos, mismo total de $ 48.320.028 que en la
+fase 1. La demo (workspace 1) no se tocó en ningún momento: mismo Postgres
+del compose, misma organización, misma versión del spec.
+
+`docs/fase2-aceptacion.md` y CLAUDE.md actualizados: Docker queda
+confirmado end to end, sin pendientes de infraestructura para la fase 2.

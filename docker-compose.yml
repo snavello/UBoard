@@ -39,6 +39,12 @@ services:
       MINUTOS_INACTIVIDAD: ${MINUTOS_INACTIVIDAD:-15}
       RUTA_ALMACEN: /datos/almacen
       ENTORNO: ${ENTORNO:-local}
+      # Claude (fase 2, paso 11): sin ANTHROPIC_API_KEY en el .env de la raiz,
+      # la inferencia sigue solo con heuristicas y avisa, no falla.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MODELO_CLAUDE: ${MODELO_CLAUDE:-claude-sonnet-5}
+      FILAS_MUESTRA_LLM: ${FILAS_MUESTRA_LLM:-30}
+      ENVIAR_MUESTRA_LLM: ${ENVIAR_MUESTRA_LLM:-true}
     ports:
       - "8000:8000"
     volumes:
