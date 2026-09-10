@@ -199,3 +199,96 @@ def test_roles_y_aislamiento(cliente, dashboard, datos, ingresar, spec_prueba):
     ingresar("constructor@beta.test")
     ajeno = cliente.get(_ruta(dashboard, "/kpis"))
     assert ajeno.status_code == 404 and ajeno.json()["codigo"] == "E-WS-01"
+
+
+def _proponer_spec(cliente, cola, workspace_id: int) -> dict:
+    respuesta = cliente.post(_ruta(workspace_id, "/proponer"))
+    assert respuesta.status_code == 202, respuesta.text
+    tarea = respuesta.json()
+    assert tarea["tipo"] == "inferencia.proponer_spec"
+    cola.esperar(tarea["id"], timeout=120)
+    return cliente.get(f"/api/workspaces/{workspace_id}/tareas/{tarea['id']}").json()
+
+
+def test_proponer_spec_sin_respuesta_de_claude_guarda_el_base(cliente, datos, ingresar, cargar_datos_prueba, modelo_prueba, cola):
+    """El conftest instala un cliente falso sin respuestas en todos los tests
+    (nunca red): Claude falla con E-INF-01 y la propuesta sigue solo con el
+    generador determinista, igual que si no hubiera clave configurada."""
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+    assert cliente.put(f"/api/workspaces/{workspace_id}/modelo", json=modelo_prueba).status_code == 201
+
+    tarea = _proponer_spec(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada", tarea
+    resultado = tarea["resultado"]
+    assert resultado["version"] == 1
+    assert resultado["claude"]["usado"] is False
+    assert resultado["claude"]["advertencia"].startswith("E-INF-01")
+
+    actual = cliente.get(_ruta(workspace_id)).json()
+    assert actual["numero"] == 1 and actual["operacion"] == "proponer_spec" and actual["modelo_version"] == 1
+    spec = actual["contenido"]
+    assert len(spec["kpis"]) == 8
+    assert len(spec["graficos"]) == 4  # 1 linea + 3 barras, igual que el generador puro
+    assert len(spec["explorador"]["pestanias"]) == 5
+    kpis_reales = cliente.get(_ruta(workspace_id, "/kpis")).json()
+    assert len(kpis_reales) == 8 and kpis_reales[0]["valor"] is not None
+
+
+def test_proponer_spec_con_claude_falso_cura_y_cachea(cliente, datos, ingresar, cargar_datos_prueba, modelo_prueba, cola, llm_falso, sesion_db):
+    from app.catalogo.tablas import Inferencia
+    from app.dashboard.generador import generar_spec_base
+    from app.modelo.esquema import ModeloSemantico
+    from app.modelo.validacion import modelo_efectivo
+
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+    assert cliente.put(f"/api/workspaces/{workspace_id}/modelo", json=modelo_prueba).status_code == 201
+
+    base = generar_spec_base(modelo_efectivo(ModeloSemantico.model_validate(modelo_prueba)))
+    curacion = {
+        "titulo": "Panel de Almacén Don José",
+        "filtros": [{"id": f.id, "etiqueta": f.id} for f in base.filtros],
+        "kpis": [{"id": k.id, "titulo": k.id} for k in reversed(base.kpis)],
+        "graficos": [{"id": g.id, "titulo": g.id, "incluir": True} for g in base.graficos],
+        "pestanias": [{"entidad": p.entidad, "titulo": p.entidad} for p in base.explorador.pestanias],
+    }
+    falso = llm_falso([curacion])
+    tarea = _proponer_spec(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada", tarea
+    claude = tarea["resultado"]["claude"]
+    assert claude == {"usado": True, "cache": False, "modelo": "claude-falso", "tokens_entrada": 100, "tokens_salida": 50}
+    assert len(falso.pedidos) == 1 and "pestanias" in falso.pedidos[0]["usuario"]
+
+    actual = cliente.get(_ruta(workspace_id)).json()
+    assert actual["contenido"]["titulo"] == "Panel de Almacén Don José"
+    assert [k["metrica"] for k in actual["contenido"]["kpis"]] == [k.metrica for k in reversed(base.kpis)]
+    guardadas = sesion_db.query(Inferencia).filter_by(workspace_id=workspace_id, tipo="spec").all()
+    assert len(guardadas) == 1
+
+    # Reproponer con el mismo modelo: mismo pedido, sale de la cache
+    falso = llm_falso([])
+    tarea = _proponer_spec(cliente, cola, workspace_id)
+    assert tarea["estado"] == "terminada" and tarea["resultado"]["claude"]["cache"] is True
+    assert falso.pedidos == []
+    assert cliente.get(_ruta(workspace_id)).json()["numero"] == 2
+
+
+def test_proponer_spec_sin_modelo_cargado(cliente, datos, ingresar, cola):
+    ingresar("constructor@acme.test")
+    tarea = _proponer_spec(cliente, cola, datos.acme_workspace_id)
+    assert tarea["estado"] == "error"
+    assert tarea["error"].startswith("E-MOD-02")
+
+
+def test_proponer_spec_exige_constructor(cliente, datos, ingresar, cargar_datos_prueba, modelo_prueba, cola):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+    cliente.put(f"/api/workspaces/{workspace_id}/modelo", json=modelo_prueba)
+    ingresar("visualizador@acme.test")
+    assert cliente.post(_ruta(workspace_id, "/proponer")).status_code == 403
+    ingresar("constructor@beta.test")
+    assert cliente.post(_ruta(workspace_id, "/proponer")).status_code == 404

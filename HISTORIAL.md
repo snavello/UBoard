@@ -531,3 +531,37 @@ correcto. La organización de prueba se borró al terminar; la demo
 Sin tests de componente nuevos: el frontend de UBoard se verifica a mano en
 el navegador desde el paso 7 (vitest solo cubre utilidades puras), y este
 paso sigue esa misma convención.
+
+## 2026-09-10 — Fase 2, paso 14: spec inicial del dashboard (v0.14.01)
+
+`app/dashboard/generador.py` arma el spec base desde el modelo efectivo: un
+KPI por métrica, línea por la primera dimensión de tiempo, hasta tres
+barras por las categorías más chicas, una pestaña por entidad. El test en
+vivo contra Claude real (`test_llm_en_vivo.py`) encontró un bug genuino en
+la primera versión: la primera dimensión de tiempo del modelo pertenecía a
+`pagos` y la primera métrica a `ventas`; emparejarlas a ciegas multiplicaba
+filas (`E-CONS-04`) y `validar_spec` rechazaba el spec base — justo el
+spec que tiene que ser SIEMPRE válido, porque es el que se guarda si Claude
+falla. La corrección: el generador ahora prueba cada combinación
+métrica-dimensión contra el compilador real (`Compilador.compilar`, sin
+ejecutar) y prueba con otras métricas hasta encontrar una que compile,
+igual que ya hacía `validar_spec` para todo el spec completo. Quedó un
+test de regresión con el caso exacto.
+
+`app/inferencia/spec.py` cura el spec base con Claude: elige el KPI
+protagonista (primero en la lista), pone títulos y etiquetas rioplatenses,
+decide qué gráficos vale la pena mostrar y ordena todo. Nunca puede
+cambiar a qué métrica, campo o entidad apunta un panel, ni agregar o quitar
+filtros, KPIs o pestañas (solo gráficos, con `incluir: false`); mismo
+mecanismo que la semántica del paso 11: validación contra el spec base,
+reintento con el error como feedback, caché por huella en la tabla
+`inferencia` (`tipo: "spec"`).
+
+Probado de punta a punta en el navegador (organización descartable,
+después borrada): subir los 5 CSV, proponer el modelo, "Confirmar todo lo
+verde", confirmar a mano las 8 métricas (quedaron en 0.8 de confianza,
+Claude nunca las auto-confirma por debajo de 0.9, a propósito) y "Proponer
+dashboard". Claude tituló "Panel de ventas", puso "Total de ventas" como
+protagonista ($ 48.320.028, el mismo total que en la aceptación de la fase
+1) y tituló el gráfico de línea "Cobros por mes". La demo (workspace 1) no
+se tocó: sigue en la versión 3 de su spec, "Ventas del almacén".

@@ -48,6 +48,8 @@ export interface ResultadoTarea {
   resumen?: string;
   relaciones?: { id: string; desde: string; hacia: string; confianza: number; estado: string }[];
   claude?: { usado: boolean; cache: boolean; modelo?: string; tokens_entrada?: number; tokens_salida?: number; advertencia?: string };
+  // inferencia.proponer_spec, ademas de version, resumen y claude
+  titulo?: string | null;
 }
 
 export interface Tarea {

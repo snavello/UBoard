@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.almacen import obtener_almacen
 from app.almacen.base import AlmacenArchivos
+from app.api.tareas import TareaSalida, a_tarea_salida
 from app.api.workspaces import workspace_del_usuario
 from app.catalogo.sesion import obtener_sesion
 from app.catalogo.tablas import RolUsuario, Usuario, VersionSpec, Workspace
@@ -21,9 +22,11 @@ from app.dashboard import operaciones, paneles
 from app.dashboard.esquema import SpecDashboard
 from app.dashboard.filtros import a_filtros_de_consulta, parsear_filtros_activos
 from app.dashboard.validacion import parsear_spec, validar_spec
+from app.inferencia.tarea import TIPO_TAREA_PROPONER_SPEC
 from app.modelo.esquema import ModeloSemantico
 from app.nucleo.auth import exigir_rol
 from app.nucleo.errores import ErrorApp
+from app.tareas import ColaTareas, encolar_tarea, obtener_cola
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/dashboard", tags=["dashboard"])
 
@@ -159,6 +162,20 @@ def cargar_spec(
     sesion: Session = Depends(obtener_sesion),
 ) -> DashboardSalida:
     return _salida(sesion, workspace, operaciones.cargar_spec(sesion, workspace, contenido, usuario))
+
+
+@router.post("/proponer", response_model=TareaSalida, status_code=status.HTTP_202_ACCEPTED)
+def proponer_spec(
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+    cola: ColaTareas = Depends(obtener_cola),
+) -> TareaSalida:
+    """Encola la propuesta del spec (fase 2, paso 14): genera un dashboard
+    base desde el modelo efectivo actual y Claude lo cura (titulos, orden,
+    que graficos vale la pena mostrar). 202 + tarea."""
+    tarea = encolar_tarea(sesion, cola, tipo=TIPO_TAREA_PROPONER_SPEC, parametros={}, workspace=workspace, usuario=usuario)
+    return a_tarea_salida(tarea)
 
 
 @router.post("/validar", response_model=ResultadoValidacion, dependencies=[Depends(exigir_rol(RolUsuario.CONSTRUCTOR))])

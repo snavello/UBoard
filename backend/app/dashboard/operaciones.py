@@ -60,6 +60,21 @@ def spec_de(version: VersionSpec) -> SpecDashboard:
 
 def cargar_spec(sesion: Session, workspace: Workspace, contenido: Any, usuario: Usuario | None) -> VersionSpec:
     spec, numero_modelo = validar_contenido(sesion, workspace, contenido)
+    return guardar_version(sesion, workspace, spec, numero_modelo, operacion=OPERACION_CARGAR_JSON, autor_id=usuario.id if usuario else None)
+
+
+def guardar_version(
+    sesion: Session,
+    workspace: Workspace,
+    spec: SpecDashboard,
+    numero_modelo: int,
+    *,
+    operacion: str,
+    autor_id: int | None,
+    resumen: str | None = None,
+) -> VersionSpec:
+    """Nueva fila en version_spec con el spec YA validado. La comparten la
+    carga de JSON y la propuesta inicial del paso 14."""
     anterior = version_actual(sesion, workspace)
     numero = (anterior.numero if anterior else 0) + 1
     spec = spec.model_copy(update={"version": numero, "modelo_version": numero_modelo})
@@ -68,9 +83,9 @@ def cargar_spec(sesion: Session, workspace: Workspace, contenido: Any, usuario: 
         numero=numero,
         modelo_version=numero_modelo,
         contenido=spec.model_dump(mode="json"),
-        operacion=OPERACION_CARGAR_JSON,
-        resumen=spec.resumen(),
-        autor_id=usuario.id if usuario else None,
+        operacion=operacion,
+        resumen=(resumen or spec.resumen())[:300],
+        autor_id=autor_id,
     )
     sesion.add(version)
     sesion.commit()

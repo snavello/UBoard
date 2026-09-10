@@ -2,7 +2,7 @@
    campos, relaciones y metricas con semaforo de confianza. Cada accion es
    una operacion granular (POST /modelo/operaciones) que crea una version
    nueva; nunca se edita el JSON a mano aca (eso sigue en "Avanzado"). */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -22,6 +22,7 @@ import type {
   MetricaModelo,
   ModeloSemantico,
   RelacionModelo,
+  Tarea,
   TipoEntidad,
   TipoSemantico,
   VersionCompleta,
@@ -103,6 +104,7 @@ function todosLosCampos(modelo: ModeloSemantico): { referencia: string; etiqueta
 export function Revision({ workspaceId }: { workspaceId: number }) {
   const clienteConsultas = useQueryClient();
   const actual = useQuery({ queryKey: ["modelo", workspaceId], queryFn: () => pedir<VersionCompleta>(rutaWorkspace(workspaceId, "/modelo")), retry: false });
+  const [tareaSpec, setTareaSpec] = useState<string | null>(null);
 
   const aplicar = useMutation({
     mutationFn: (operacion: Record<string, unknown>) => pedir<VersionCompleta>(rutaWorkspace(workspaceId, "/modelo/operaciones"), { method: "POST", json: operacion }),
@@ -110,6 +112,10 @@ export function Revision({ workspaceId }: { workspaceId: number }) {
       void clienteConsultas.invalidateQueries({ queryKey: ["modelo", workspaceId] });
       void clienteConsultas.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
     },
+  });
+  const proponerSpec = useMutation({
+    mutationFn: () => pedir<Tarea>(rutaWorkspace(workspaceId, "/dashboard/proponer"), { method: "POST" }),
+    onSuccess: (tarea) => setTareaSpec(tarea.id),
   });
 
   if (actual.isPending) return <Cargando />;
@@ -150,7 +156,77 @@ export function Revision({ workspaceId }: { workspaceId: number }) {
       <SeccionRelaciones modelo={modelo} aplicar={aplicar.mutateAsync} pendiente={aplicar.isPending} />
       <SeccionMetricas modelo={modelo} aplicar={aplicar.mutateAsync} pendiente={aplicar.isPending} />
       <SeccionDimensionesTiempo modelo={modelo} aplicar={aplicar.mutateAsync} pendiente={aplicar.isPending} />
+
+      <section className={`${estilos.seccion} ${estilos.proponerDashboard}`}>
+        <div>
+          <h2>Proponer el dashboard</h2>
+          <p className="secundario">
+            Cuando estés conforme con el modelo, UBoard arma los filtros, KPIs, gráficos y el explorador a partir de
+            lo confirmado, y Claude elige qué mostrar primero y cómo titular todo.
+          </p>
+        </div>
+        <button type="button" className="boton boton--primario" disabled={proponerSpec.isPending} onClick={() => proponerSpec.mutate()}>
+          {proponerSpec.isPending ? "Encolando…" : "Proponer dashboard"}
+        </button>
+        {proponerSpec.isError && <AvisoError error={proponerSpec.error} titulo="No se pudo proponer el dashboard" />}
+        {tareaSpec && (
+          <ul className={estilos.tareas}>
+            <PropuestaSpecEnCurso
+              key={tareaSpec}
+              workspaceId={workspaceId}
+              tareaId={tareaSpec}
+              alTerminar={() => clienteConsultas.invalidateQueries({ queryKey: ["dashboard", workspaceId] })}
+            />
+          </ul>
+        )}
+      </section>
     </div>
+  );
+}
+
+function PropuestaSpecEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: number; tareaId: string; alTerminar: () => void }) {
+  const tarea = useQuery({
+    queryKey: ["tarea", workspaceId, tareaId],
+    queryFn: () => pedir<Tarea>(rutaWorkspace(workspaceId, `/tareas/${tareaId}`)),
+    refetchIntervalInBackground: true,
+    refetchInterval: (consulta) => {
+      const estado = consulta.state.data?.estado;
+      return estado === "pendiente" || estado === "corriendo" ? 800 : false;
+    },
+  });
+  const estado = tarea.data?.estado;
+  useEffect(() => {
+    if (estado === "terminada" || estado === "error") alTerminar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado]);
+
+  if (!tarea.data) return <li className="mudo">Encolando…</li>;
+  const { progreso, mensaje, resultado, error } = tarea.data;
+  return (
+    <li className={estilos.tareaSpec}>
+      <div className={estilos.barraProgreso} aria-hidden="true">
+        <span style={{ width: `${estado === "error" ? 100 : progreso}%` }} className={estado === "error" ? estilos.progresoError : undefined} />
+      </div>
+      <span>
+        {estado === "terminada" && resultado ? (
+          <>
+            Dashboard propuesto (versión {resultado.version}) "{resultado.titulo}": {resultado.resumen}.{" "}
+            {resultado.claude?.usado
+              ? resultado.claude.cache
+                ? "Curado por Claude (respuesta guardada, sin costo). "
+                : `Curado por Claude (${formatearNumero((resultado.claude.tokens_entrada ?? 0) + (resultado.claude.tokens_salida ?? 0), 0)} tokens). `
+              : resultado.claude?.advertencia
+                ? `Sin curar: ${resultado.claude.advertencia} `
+                : ""}
+            <Link to="/tablero">Mirá el tablero</Link>.
+          </>
+        ) : estado === "error" ? (
+          error
+        ) : (
+          mensaje ?? "Armando…"
+        )}
+      </span>
+    </li>
   );
 }
 

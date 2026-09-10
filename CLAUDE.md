@@ -66,6 +66,7 @@ backend/
     inferencia/     # heuristicas (claves, relaciones, tipos, metricas), llm (ClienteLLM real/falso),
                     # semantica (prompt, validacion, aplicar), fusion, tarea
     modelo/edicion.py  # operaciones granulares del wizard y el chat (§4)
+    dashboard/generador.py  # spec base determinista (paso 14)
     asociativo/ asistente/  # fases 3 y 4
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
@@ -282,7 +283,25 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     generando versiones correlativas. Sin tests de componente nuevos (el
     frontend sigue verificándose a mano en el navegador, como en los pasos
     6 a 12); 7 de vitest y toda la suite backend sin cambios, en verde.
-  - Pasos 14 y 15: pendientes.
+  - Paso 14 (spec inicial): HECHO 2026-09-10 (v0.14.01). `dashboard/
+    generador.py` (`generar_spec_base`, determinista: un KPI por métrica
+    confirmada, línea por la primera dimensión de tiempo, hasta 3 barras
+    por las categorías con menos valores distintos, una pestaña de
+    explorador por entidad; cada combinación métrica-dimensión se prueba
+    contra el compilador real antes de proponerla, para no generar un
+    gráfico que multiplique filas); `inferencia/spec.py` (Claude cura:
+    protagonista, títulos, orden, qué gráficos vale la pena mostrar, nunca
+    cambia a qué apunta un panel; mismo patrón de validar + reintentar +
+    cachear del paso 11); `dashboard/operaciones.py` con `guardar_version`
+    compartido; tarea `inferencia.proponer_spec`, `POST /dashboard/proponer`
+    y botón "Proponer dashboard" al pie de Revisión, con link al Tablero.
+    Un test en vivo encontró un caso real donde el generador emparejaba una
+    métrica con una dimensión de otra rama del modelo y multiplicaba filas;
+    quedó corregido y con test de regresión. Probado en el navegador de
+    punta a punta (proponer modelo, confirmar, proponer dashboard, Claude
+    lo tituló "Panel de ventas" con el KPI protagonista correcto). 8 tests
+    de generador + 4 de curación + 4 de API (298 en total, más 2 en vivo).
+  - Paso 15 (integración y aceptación de la fase 2): pendiente.
 - Fases 3 y 4: no empezadas.
 
 ## Accesos de la demo local

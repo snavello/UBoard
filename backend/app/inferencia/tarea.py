@@ -9,6 +9,10 @@ from sqlalchemy import select
 
 from app.catalogo.tablas import Fuente, Inferencia, Workspace
 from app.consultas.motor import fuentes_listas, obtener_motor
+from app.dashboard import operaciones as operaciones_dashboard
+from app.dashboard.esquema import SpecDashboard
+from app.dashboard.generador import generar_spec_base
+from app.dashboard.validacion import validar_spec
 from app.inferencia.fusion import fusionar
 from app.inferencia.heuristicas import FuentePerfilada, proponer_modelo
 from app.inferencia.llm import ClienteLLM, obtener_cliente_llm
@@ -21,6 +25,7 @@ from app.inferencia.semantica import (
     huella_pedido,
     validar_respuesta,
 )
+import app.inferencia.spec as spec_llm
 from app.ingesta.tipado import columna_sql
 from app.modelo import operaciones
 from app.modelo.esquema import ModeloSemantico
@@ -34,7 +39,10 @@ registro = logging.getLogger("uboard.inferencia")
 
 TIPO_TAREA_PROPONER_MODELO = "inferencia.proponer_modelo"
 OPERACION_PROPONER = "proponer_modelo"
+TIPO_TAREA_PROPONER_SPEC = "inferencia.proponer_spec"
+OPERACION_PROPONER_SPEC = "proponer_spec"
 TIPO_INFERENCIA_SEMANTICA = "semantica"
+TIPO_INFERENCIA_SPEC = "spec"
 
 
 def _muestras(conexion: duckdb.DuckDBPyConnection, fuentes: list[Fuente], filas: int) -> dict[str, list[dict[str, Any]]]:
@@ -161,3 +169,92 @@ def tarea_proponer_modelo(contexto: ContextoTarea, parametros: dict) -> dict:
         ],
         "metricas": [{"id": metrica.id, "nombre": metrica.nombre, "estado": metrica.estado, "origen": metrica.origen} for metrica in modelo.metricas],
     }
+
+
+def curar_con_claude(
+    contexto: ContextoTarea, workspace: Workspace, cliente: ClienteLLM, spec: SpecDashboard, modelo: ModeloSemantico
+) -> tuple[SpecDashboard, dict[str, Any]]:
+    """Mismo mecanismo de cache que `enriquecer_con_claude`, para la curacion
+    del spec (paso 14)."""
+    modelo_claude = getattr(cliente, "modelo", "?")
+    pedido = spec_llm.armar_pedido(spec, modelo)
+    huella = spec_llm.huella_pedido(modelo_claude, spec_llm.SISTEMA, pedido)
+    guardada = contexto.sesion.scalar(
+        select(Inferencia).where(Inferencia.workspace_id == workspace.id, Inferencia.huella == huella)
+    )
+    if guardada is not None:
+        curado = spec_llm.SpecCurado.model_validate(guardada.respuesta)
+        if not spec_llm.validar_curacion(spec, curado):
+            return spec_llm.aplicar_curacion(spec, curado), {"usado": True, "cache": True, "modelo": guardada.modelo_claude, "tokens_entrada": 0, "tokens_salida": 0}
+
+    curado, cruda = spec_llm.consultar_curacion(cliente, spec, pedido)
+    if guardada is None:
+        contexto.sesion.add(
+            Inferencia(
+                workspace_id=workspace.id,
+                tipo=TIPO_INFERENCIA_SPEC,
+                huella=huella,
+                modelo_claude=cruda.modelo,
+                respuesta=curado.model_dump(mode="json"),
+                tokens_entrada=cruda.tokens_entrada,
+                tokens_salida=cruda.tokens_salida,
+            )
+        )
+        contexto.sesion.commit()
+    return spec_llm.aplicar_curacion(spec, curado), {
+        "usado": True,
+        "cache": False,
+        "modelo": cruda.modelo,
+        "tokens_entrada": cruda.tokens_entrada,
+        "tokens_salida": cruda.tokens_salida,
+    }
+
+
+@registrar_tarea(TIPO_TAREA_PROPONER_SPEC)
+def tarea_proponer_spec(contexto: ContextoTarea, parametros: dict) -> dict:
+    """Genera el spec base desde el modelo efectivo actual y lo manda a
+    curar a Claude; si no hay clave o Claude falla, se guarda el base tal
+    cual (nunca queda un dashboard sin proponer)."""
+    workspace = contexto.sesion.get(Workspace, contexto.workspace_id)
+    if workspace is None:
+        raise ErrorApp("E-WS-01", f"id: {contexto.workspace_id}")
+
+    contexto.informar(15, "Leyendo el modelo confirmado")
+    modelo, numero_modelo = operaciones_dashboard.modelo_efectivo_actual(contexto.sesion, workspace)
+
+    contexto.informar(30, "Armando filtros, KPIs, gráficos y explorador")
+    base = generar_spec_base(modelo)
+    if not (base.kpis or base.graficos or base.explorador.pestanias):
+        raise ErrorApp("E-SPEC-05", f"workspace: {workspace.id}")
+
+    claude: dict[str, Any] = {"usado": False, "cache": False}
+    spec_final = base
+    cliente = obtener_cliente_llm()
+    if cliente is None:
+        claude["advertencia"] = "Sin clave de Anthropic configurada: el dashboard es solo el generado automáticamente."
+    elif not (base.kpis or base.graficos):
+        claude["advertencia"] = "No hay KPIs ni gráficos que curar todavía."
+    else:
+        contexto.informar(55, "Consultando a Claude")
+        try:
+            spec_final, claude = curar_con_claude(contexto, workspace, cliente, base, modelo)
+        except ErrorApp as error:
+            registro.warning("Claude no curo el spec: %s", error)
+            claude["advertencia"] = f"{error.codigo}: {error.mensaje}"
+            spec_final = base
+
+    contexto.informar(85, "Validando")
+    errores = validar_spec(spec_final, modelo)
+    if errores and spec_final is not base:
+        registro.warning("La curacion de Claude no valido, se usa el spec base: %s", errores[:3])
+        claude["advertencia"] = "La curación no pasó la validación; se usó el dashboard generado automáticamente."
+        spec_final = base
+        errores = validar_spec(spec_final, modelo)
+    if errores:
+        raise ErrorApp("E-SPEC-06", "; ".join(f"{error.codigo} {error.ubicacion}" for error in errores[:5]))
+
+    version = operaciones_dashboard.guardar_version(
+        contexto.sesion, workspace, spec_final, numero_modelo, operacion=OPERACION_PROPONER_SPEC, autor_id=contexto.tarea.creada_por_id
+    )
+    contexto.informar(95, "Listo")
+    return {"version": version.numero, "resumen": spec_final.resumen(), "titulo": spec_final.titulo, "claude": claude}
