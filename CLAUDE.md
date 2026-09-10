@@ -79,7 +79,8 @@ frontend/src/
                     # paleta.ts, tema.ts, filtrosUrl.ts, componentes/ (Marco, Aviso, Cargando,
                     # Pestanias, Paginador), graficos/ (useGrafico, opciones ECharts)
   paginas/Ingresar  visualizador/ (Tablero, Filtros, Kpis, Grafico, Explorador)
-  constructor/ (Fuentes, Modelo)  plataforma/ (Plataforma)
+  constructor/ (Fuentes, Modelo con pestañas Revisión/Avanzado, Revision =
+    wizard con semáforos)  plataforma/ (Plataforma)
 docker/             # postgres-init.sql (crea uboard_test), entrypoint.sh
 datos_prueba/       # los 5 CSV + modelo.json + spec.json
 docs/               # especificación, planes
@@ -264,7 +265,24 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     `E-MOD-04` (operación inválida) y `E-MOD-05` (no aplicable: clave
     primaria protegida, relación duplicada, métrica usada por un cociente,
     etc.). 8 tests puros + 3 de API (296 en total).
-  - Pasos 13 a 15: pendientes.
+  - Paso 13 (wizard de revisión): HECHO 2026-09-10 (v0.13.01). Tipos
+    TypeScript del `ModeloSemantico` en `tipos.ts` (espejo del Pydantic);
+    `compartido/componentes/Semaforo.tsx` (chip confirmado/rechazado/nivel
+    de confianza, con ícono además de color); `constructor/Revision.tsx`:
+    pestaña principal de Modelo (la anterior pasa a "Avanzado"), secciones
+    Entidades y campos (nombre y tipo semántico editables, sinónimos,
+    tipo hechos/dimensión, confirmar/rechazar por campo), Relaciones
+    (evidencia en castellano, confirmar/rechazar/eliminar/crear), Métricas
+    (crear/editar/confirmar/rechazar/eliminar) y Dimensiones de tiempo
+    (agregar/quitar), cada una con "Confirmar todo lo verde" y un botón
+    global en la cabecera. Cada acción llama `POST /modelo/operaciones`
+    del paso 12. Verificado en el navegador con un modelo recién propuesto
+    (sin confirmar nada): semáforos, evidencia, confirmar de a uno, en
+    bloque y global, crear métrica y ver dimensiones de tiempo, todo
+    generando versiones correlativas. Sin tests de componente nuevos (el
+    frontend sigue verificándose a mano en el navegador, como en los pasos
+    6 a 12); 7 de vitest y toda la suite backend sin cambios, en verde.
+  - Pasos 14 y 15: pendientes.
 - Fases 3 y 4: no empezadas.
 
 ## Accesos de la demo local
@@ -566,6 +584,15 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   JSON que consume la API: clave de caché de TanStack Query y link
   compartible. Los chips abren un popover (lista con búsqueda y checkboxes,
   o rango con dos fechas y atajos) y aplican al instante.
+- **Wizard de revisión** (`constructor/Revision.tsx`, paso 13): opera
+  solo con las operaciones granulares del paso 12, nunca con `PUT /modelo`;
+  cada botón dispara una y la vista se refresca invalidando `["modelo",
+  workspaceId]`. El semáforo (`Semaforo.tsx`) nunca es solo color: un
+  ícono (`✓`/`✕`/`●`/`◐`/`○`) más una palabra distinguen confirmado,
+  rechazado y los tres niveles de confianza (alta ≥ 0.9, media ≥ 0.6,
+  baja). La evidencia de heurísticas y Claude se traduce a una frase corta
+  (`MOTIVO` para campos, inclusión/huérfanos/nombre para relaciones) en
+  vez de mostrar el JSON crudo.
 - **Sesión**: `pedir()` manda `credentials: same-origin`; un 401 dispara el
   evento `uboard:sesion-vencida` y `ProveedorSesion` deja al usuario en null
   (las rutas protegidas redirigen a `/ingresar`). Al iniciar o cerrar sesión

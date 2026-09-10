@@ -122,6 +122,107 @@ export interface Muestra {
   total: number;
 }
 
+/* Modelo semantico (espejo de app/modelo/esquema.py). */
+export type Formato = "moneda" | "entero" | "decimal" | "porcentaje";
+export type TipoDato = "entero" | "decimal" | "fecha" | "fecha_hora" | "booleano" | "texto";
+export type TipoSemantico =
+  | "identificador"
+  | "clave_foranea"
+  | "fecha"
+  | "monto"
+  | "cantidad"
+  | "porcentaje"
+  | "categoria"
+  | "texto_libre"
+  | "booleano"
+  | "geo";
+export type OrigenCampo = "heuristica" | "llm" | "usuario";
+export type EstadoElemento = "propuesta" | "confirmada" | "rechazada";
+export type TipoEntidad = "hechos" | "dimension";
+export type Cardinalidad = "n:1" | "1:1" | "1:n";
+export type Agregacion = "suma" | "conteo" | "conteo_distinto" | "promedio" | "minimo" | "maximo";
+export type Granularidad = "dia" | "semana" | "mes" | "trimestre" | "anio";
+
+export interface Campo {
+  id: string;
+  columna_origen: string;
+  nombre: string;
+  tipo_dato: TipoDato;
+  tipo_semantico: TipoSemantico;
+  confianza: number;
+  origen: OrigenCampo;
+  estado: EstadoElemento;
+  descripcion: string | null;
+  evidencia: Record<string, unknown>;
+}
+
+export interface EntidadModelo {
+  id: string;
+  nombre: string;
+  fuente: string;
+  tipo: TipoEntidad;
+  clave_primaria: string[];
+  campos: Campo[];
+  sinonimos: string[];
+  descripcion: string | null;
+  origen: OrigenCampo;
+}
+
+export interface ExtremoRelacion {
+  entidad: string;
+  campo: string;
+}
+
+export interface RelacionModelo {
+  id: string;
+  desde: ExtremoRelacion;
+  hacia: ExtremoRelacion;
+  cardinalidad: Cardinalidad;
+  confianza: number;
+  evidencia: Record<string, unknown>;
+  estado: EstadoElemento;
+  propagar: boolean;
+}
+
+export interface ExpresionAgregacion {
+  agregacion: Agregacion;
+  campo: string;
+}
+
+export interface ExpresionCociente {
+  numerador: string;
+  denominador: string;
+}
+
+export interface MetricaModelo {
+  id: string;
+  nombre: string;
+  expresion: ExpresionAgregacion | ExpresionCociente;
+  formato: Formato;
+  confianza: number;
+  origen: OrigenCampo;
+  estado: EstadoElemento;
+  descripcion: string | null;
+}
+
+export interface DimensionTiempoModelo {
+  campo: string;
+  granularidades: Granularidad[];
+}
+
+export interface ModeloSemantico {
+  version: number;
+  entidades: EntidadModelo[];
+  relaciones: RelacionModelo[];
+  metricas: MetricaModelo[];
+  dimensiones_tiempo: DimensionTiempoModelo[];
+  umbral_confianza: number;
+}
+
+export function esExpresionAgregacion(expresion: ExpresionAgregacion | ExpresionCociente): expresion is ExpresionAgregacion {
+  return "agregacion" in expresion;
+}
+
 export interface VersionResumen {
   numero: number;
   operacion: string;
@@ -189,7 +290,6 @@ export interface DashboardSalida extends VersionResumen {
   advertencias: ErrorValidacion[];
 }
 
-export type Formato = "moneda" | "entero" | "decimal" | "porcentaje";
 
 export interface KpiSalida {
   id: string;

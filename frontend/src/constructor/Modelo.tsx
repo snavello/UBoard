@@ -1,6 +1,7 @@
-/* Constructor (fase 1): el modelo semantico y el spec del dashboard se cargan
-   como JSON, se validan y se guardan como una version nueva. El wizard y el
-   chat (fases 2 y 3) reemplazan esta pantalla. */
+/* Constructor: "Revision" es el wizard de la fase 2 (semaforos, operaciones
+   granulares) para el modelo; "Avanzado" es el editor JSON de la fase 1,
+   que sigue sirviendo para pegar un modelo entero o para el spec del
+   dashboard (el wizard del spec llega en el paso 14). */
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -11,12 +12,13 @@ import { Marco } from "../compartido/componentes/Marco";
 import { Pestanias } from "../compartido/componentes/Pestanias";
 import { formatearFecha } from "../compartido/formato";
 import { useSesion } from "../compartido/sesion";
+import { Revision } from "./Revision";
 import type { ResultadoValidacion, VersionCompleta, VersionResumen } from "../tipos";
 import estilos from "./Modelo.module.css";
 
-type Artefacto = "modelo" | "dashboard";
+type Pestania = "revision" | "modelo" | "dashboard";
 
-const DESCRIPCION: Record<Artefacto, { titulo: string; ayuda: string; sinVersion: string; plantilla: string }> = {
+const DESCRIPCION: Record<"modelo" | "dashboard", { titulo: string; ayuda: string; sinVersion: string; plantilla: string }> = {
   modelo: {
     titulo: "Modelo semántico",
     ayuda: "Entidades, campos, relaciones, métricas y dimensiones de tiempo. Cada campo apunta a una columna de una fuente cargada.",
@@ -37,23 +39,26 @@ const DESCRIPCION: Record<Artefacto, { titulo: string; ayuda: string; sinVersion
 
 export function Modelo() {
   const { usuario } = useSesion();
-  const [activa, setActiva] = useState<Artefacto>("modelo");
+  const [activa, setActiva] = useState<Pestania>("revision");
+  const workspaceId = usuario?.workspace_id ?? 0;
   return (
     <Marco kicker={`UBoard · ${usuario?.organizacion?.nombre ?? ""}`} titulo="Modelo y dashboard">
       <Pestanias
         pestanias={[
-          { id: "modelo", titulo: "Modelo semántico" },
+          { id: "revision", titulo: "Revisión" },
+          { id: "modelo", titulo: "Avanzado" },
           { id: "dashboard", titulo: "Dashboard" },
         ]}
         activa={activa}
-        onCambiar={(id) => setActiva(id as Artefacto)}
+        onCambiar={(id) => setActiva(id as Pestania)}
       />
-      <EditorJson key={activa} artefacto={activa} workspaceId={usuario?.workspace_id ?? 0} />
+      {activa === "revision" && <Revision workspaceId={workspaceId} />}
+      {activa !== "revision" && <EditorJson key={activa} artefacto={activa} workspaceId={workspaceId} />}
     </Marco>
   );
 }
 
-function EditorJson({ artefacto, workspaceId }: { artefacto: Artefacto; workspaceId: number }) {
+function EditorJson({ artefacto, workspaceId }: { artefacto: "modelo" | "dashboard"; workspaceId: number }) {
   const descripcion = DESCRIPCION[artefacto];
   const clienteConsultas = useQueryClient();
   const ruta = rutaWorkspace(workspaceId, `/${artefacto}`);

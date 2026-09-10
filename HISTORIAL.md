@@ -506,3 +506,28 @@ Probado a mano en `test_edicion.py` sobre el modelo escrito y sobre uno
 "propuesto" armado con confianzas mixtas, para que `confirmar_todo`
 tuviera algo interesante que dejar afuera. 8 tests puros y 3 de API sobre
 296 en total.
+
+## 2026-09-10 — Fase 2, paso 13: wizard de revisión con semáforos (v0.13.01)
+
+`constructor/Revision.tsx` reemplaza al editor JSON como pestaña principal
+de Modelo (que pasa a llamarse "Avanzado"). Cuatro secciones —Entidades y
+campos, Relaciones, Métricas, Dimensiones de tiempo— construidas enteramente
+sobre las operaciones granulares del paso 12: ningún botón del wizard llama
+a `PUT /modelo`. El semáforo se decidió con ícono además de color (una
+decisión que ya estaba en el plan de la fase 2, para que el rojo/verde no
+sea la única señal), y la evidencia de las heurísticas se resume en una
+frase ("98 % de las filas coinciden, 56 huérfanas") en vez de mostrar el
+diccionario crudo.
+
+Se probó a mano con un modelo recién propuesto (organización descartable
+`PruebaWizard`, subiendo los 5 CSV y llamando a `/modelo/proponer`, con
+Claude real): confirmar un campo suelto, "Confirmar lo verde" de una
+entidad, el botón global "Confirmar todo lo verde" (23 elementos de una
+vez), crear una métrica nueva desde el formulario y ver las dimensiones de
+tiempo. Cada acción generó su versión correlativa (2 a 5) con el resumen
+correcto. La organización de prueba se borró al terminar; la demo
+(workspace 1) no se tocó.
+
+Sin tests de componente nuevos: el frontend de UBoard se verifica a mano en
+el navegador desde el paso 7 (vitest solo cubre utilidades puras), y este
+paso sigue esa misma convención.

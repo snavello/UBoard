@@ -1,0 +1,25 @@
+.revision { display: flex; flex-direction: column; gap: 32px; margin-top: 20px; }
+.cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.seccion { display: flex; flex-direction: column; gap: 12px; }
+.tituloSeccion { display: flex; align-items: center; gap: 12px; }
+.tarjetas { display: flex; flex-direction: column; gap: 18px; }
+.tarjeta { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--superficie); }
+.tarjetaCabecera { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tituloEntidad { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nombreEntidad { font-family: var(--fuente-titulo); font-size: 18px; }
+.controlesEntidad { display: flex; align-items: center; gap: 8px; }
+.sinonimos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.quitar { border: none; background: none; cursor: pointer; color: inherit; font-size: 13px; padding: 0 0 0 4px; }
+.formInline { display: inline-flex; }
+.formInline input { min-height: 28px; padding: 2px 8px; font-size: 12.5px; width: 120px; }
+.tablaScroll { overflow-x: auto; }
+.acciones { display: flex; gap: 6px; flex-wrap: nowrap; }
+.textoEditable { border: 1px dashed transparent; background: none; padding: 2px 4px; margin: -2px -4px; cursor: text; text-align: left; font: inherit; color: inherit; border-radius: 4px; }
+.textoEditable:hover { border-color: var(--linea); }
+.listaDimensiones { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.listaDimensiones li { display: flex; align-items: center; gap: 12px; }
+.crear { border: 1px solid var(--linea); border-radius: var(--radio); padding: 10px 14px; }
+.crear summary { cursor: pointer; font-size: 14px; color: var(--tinta-2); }
+.formCrear { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.checkboxes { display: flex; flex-wrap: wrap; gap: 10px; }
+.checkbox { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
