@@ -292,3 +292,49 @@ def test_proponer_spec_exige_constructor(cliente, datos, ingresar, cargar_datos_
     assert cliente.post(_ruta(workspace_id, "/proponer")).status_code == 403
     ingresar("constructor@beta.test")
     assert cliente.post(_ruta(workspace_id, "/proponer")).status_code == 404
+
+
+def test_operaciones_granulares_crean_versiones(cliente, dashboard, spec_prueba):
+    ruta = _ruta(dashboard, "/operaciones")
+    assert "crear_grafico" in cliente.get(ruta).json()
+
+    respuesta = cliente.post(ruta, json={"operacion": "editar_titulo", "titulo": "Panel de ventas"})
+    assert respuesta.status_code == 201, respuesta.text
+    version = respuesta.json()
+    assert version["numero"] == 2 and version["operacion"] == "editar_titulo"
+    assert version["contenido"]["titulo"] == "Panel de ventas"
+    assert version["resumen"] == "Título del dashboard: 'Panel de ventas'"
+
+    # Operacion desconocida y parametros invalidos: E-SPEC-07, sin version nueva
+    respuesta = cliente.post(ruta, json={"operacion": "hacer_magia"})
+    assert respuesta.status_code == 400 and respuesta.json()["codigo"] == "E-SPEC-07"
+    respuesta = cliente.post(ruta, json={"operacion": "eliminar_kpi"})
+    assert respuesta.status_code == 400 and respuesta.json()["codigo"] == "E-SPEC-07"
+    # No aplicable: E-SPEC-08
+    respuesta = cliente.post(ruta, json={"operacion": "eliminar_kpi", "kpi": "no_existe"})
+    assert respuesta.status_code == 400 and respuesta.json()["codigo"] == "E-SPEC-08"
+    # Aplicable pero el resultado no valida: E-SPEC-01 (dimension que multiplicaria filas)
+    respuesta = cliente.post(
+        ruta, json={"operacion": "crear_grafico", "tipo": "barras", "metrica": "total_ventas", "dimension": "medios_pago.nombre"}
+    )
+    assert respuesta.status_code == 422 and respuesta.json()["codigo"] == "E-SPEC-01"
+    assert cliente.get(_ruta(dashboard)).json()["numero"] == 2, "ninguna de las fallidas creo version"
+
+    respuesta = cliente.post(
+        ruta, json={"operacion": "crear_grafico", "tipo": "barras", "metrica": "total_ventas", "dimension": "vendedores.sucursal", "titulo": "Por sucursal"}
+    )
+    assert respuesta.status_code == 201 and respuesta.json()["numero"] == 3
+    graficos = cliente.get(_ruta(dashboard, "/kpis"))  # sanity: el dashboard sigue sirviendo bien
+    assert graficos.status_code == 200
+    grafico_nuevo = next(g for g in respuesta.json()["contenido"]["graficos"] if g["dimension"] == "vendedores.sucursal")
+    assert cliente.get(_ruta(dashboard, f"/graficos/{grafico_nuevo['id']}")).status_code == 200
+
+    versiones = cliente.get(_ruta(dashboard, "/versiones")).json()
+    assert [v["operacion"] for v in versiones] == ["crear_grafico", "editar_titulo", "cargar_json"]
+
+
+def test_operaciones_exigen_constructor(cliente, dashboard, datos, ingresar):
+    ingresar("visualizador@acme.test")
+    assert cliente.post(_ruta(dashboard, "/operaciones"), json={"operacion": "editar_titulo", "titulo": "x"}).status_code == 403
+    ingresar("constructor@beta.test")
+    assert cliente.post(_ruta(dashboard, "/operaciones"), json={"operacion": "editar_titulo", "titulo": "x"}).status_code == 404

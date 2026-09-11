@@ -629,3 +629,25 @@ Sd aceptó la fase 2 ("ok fase 3"). Arranca la fase 3 (chat constructor,
 preguntas del visualizador, historial y deshacer, expresiones aritméticas
 libres): primero la lectura, dudas, decisiones y plan, como en las fases
 anteriores.
+
+## 2026-09-10 — Fase 3, paso 16: operaciones granulares del dashboard (v0.16.01)
+
+`app/dashboard/edicion.py` repite exactamente el patrón de `modelo/edicion.py`
+(paso 12): 14 operaciones tipadas con `TypeAdapter` discriminado por
+`operacion`, puras (`aplicar_operacion(spec, operacion) -> (spec, resumen)`),
+sin validar contra el modelo — eso lo sigue haciendo `validar_spec` al
+guardar, compilando cada panel como siempre. `POST /dashboard/operaciones`
+comparte el mismo `guardar_version` de la propuesta del paso 14, así que una
+operación que deja el dashboard roto (por ejemplo, un gráfico que
+multiplica filas) no crea versión.
+
+Hoy el wizard no necesita esto: el spec sale entero del generador o del
+JSON de "Avanzado". Pero es la pieza que le faltaba al plan de la fase 3
+para que el chat constructor (paso 20) pueda "agregar un gráfico de ventas
+por sucursal por mes" sin tocar el JSON — va a ser, literalmente, una
+llamada a `crear_grafico`.
+
+6 tests puros contra el spec escrito a mano (incluido el caso donde se crea
+un gráfico con una dimensión que multiplicaría filas: la operación se
+aplica igual, pero `validar_spec` la rechaza) y 2 de API. Suite completa:
+306 tests backend en verde por archivo.

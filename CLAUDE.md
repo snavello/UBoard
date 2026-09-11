@@ -67,6 +67,7 @@ backend/
                     # semantica (prompt, validacion, aplicar), fusion, tarea
     modelo/edicion.py  # operaciones granulares del wizard y el chat (§4)
     dashboard/generador.py  # spec base determinista (paso 14)
+    dashboard/edicion.py    # operaciones granulares del dashboard (paso 16)
     asociativo/ asistente/  # fases 3 y 4
     estatico/       # build de Vite (gitignored)
   alembic/          # migraciones; env.py toma la URL de la config de la app
@@ -315,7 +316,19 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     inferencia en Docker quedaba siempre en modo heurístico puro, en
     silencio. Corregido (v0.15.02).
   - **Fase 2 aceptada por Sd el 2026-09-10.**
-- **Fase 3 — Asistente: EN CURSO.**
+- **Fase 3 — Asistente: EN CURSO.** Lectura, dudas, decisiones y plan de 7
+  pasos (16 a 22) en `docs/fase3-lectura-y-plan.md`, aprobado por Sd.
+  - Paso 16 (operaciones del dashboard): HECHO 2026-09-10 (v0.16.01).
+    `app/dashboard/edicion.py`: 14 operaciones tipadas (mismo patrón que
+    `modelo/edicion.py` del paso 12) — editar título; crear/editar/eliminar
+    filtro, KPI, gráfico, pestaña del explorador; `reordenar_kpis` para
+    cambiar el protagonista sin recrear nada. `POST /dashboard/operaciones`
+    reusa `validar_spec` (compila cada panel) y el `guardar_version` que ya
+    existía. Nuevos `E-SPEC-07` (operación inválida) y `E-SPEC-08` (no
+    aplicable). Es la pieza que le va a faltar al chat constructor (paso
+    20) para poder "agregar un gráfico" sin tocar el JSON. 6 tests puros +
+    2 de API (306 en total).
+  - Pasos 17 a 22: pendientes.
 - Fase 4: no empezada.
 
 ## Accesos de la demo local
@@ -469,6 +482,15 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - `POST /modelo/operaciones` reusa las tres capas de validación y
   `guardar_version` (mismo mecanismo que `PUT /modelo` y la propuesta
   heurística): una operación mala no dejo rastro, ninguna versión a medias.
+- El mismo patrón se repite igual para el dashboard desde el paso 16
+  (`app/dashboard/edicion.py`, `E-SPEC-07`/`E-SPEC-08`, `POST
+  /dashboard/operaciones`): 14 operaciones (título; filtro, KPI, gráfico,
+  pestaña del explorador con crear/editar/eliminar; `reordenar_kpis`).
+  `crear_*` genera el id si no viene (mismo esquema que el generador del
+  paso 14: `f_`/`k_`/`g_` + el campo o la métrica); crear con un id
+  repetido es `E-SPEC-08`. Esta capa NO valida contra el modelo (eso lo
+  hace `validar_spec` al guardar, y ahí un panel que multiplica filas es
+  `E-SPEC-01`, no un error de esta capa).
 
 ## Reglas de Claude en la inferencia (vigentes desde el paso 11)
 - **Claude solo opina sobre lo semántico**: nombres de entidades y campos,

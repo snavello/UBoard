@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.catalogo.tablas import Usuario, VersionSpec, Workspace
+from app.dashboard.edicion import aplicar_operacion, parsear_operacion
 from app.dashboard.esquema import SpecDashboard
 from app.dashboard.validacion import exigir_valido, parsear_spec, validar_spec
 from app.modelo import operaciones as operaciones_modelo
@@ -61,6 +62,22 @@ def spec_de(version: VersionSpec) -> SpecDashboard:
 def cargar_spec(sesion: Session, workspace: Workspace, contenido: Any, usuario: Usuario | None) -> VersionSpec:
     spec, numero_modelo = validar_contenido(sesion, workspace, contenido)
     return guardar_version(sesion, workspace, spec, numero_modelo, operacion=OPERACION_CARGAR_JSON, autor_id=usuario.id if usuario else None)
+
+
+def aplicar_y_guardar(sesion: Session, workspace: Workspace, contenido_operacion: Any, usuario: Usuario | None) -> VersionSpec:
+    """Una operacion granular del chat constructor (paso 20; el wizard de
+    modelo ya usa el equivalente para modelo desde el paso 12): se aplica
+    sobre la version actual del spec, se valida contra el modelo efectivo
+    (`validar_spec`, compila cada panel) y queda una version nueva. Sin spec
+    cargado, E-SPEC-02."""
+    operacion = parsear_operacion(contenido_operacion)
+    actual = exigir_version_actual(sesion, workspace)
+    spec, resumen = aplicar_operacion(spec_de(actual), operacion)
+    modelo, numero_modelo = modelo_efectivo_actual(sesion, workspace)
+    exigir_valido(validar_spec(spec, modelo))
+    return guardar_version(
+        sesion, workspace, spec, numero_modelo, operacion=operacion.operacion, autor_id=usuario.id if usuario else None, resumen=resumen
+    )
 
 
 def guardar_version(

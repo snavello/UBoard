@@ -164,6 +164,29 @@ def cargar_spec(
     return _salida(sesion, workspace, operaciones.cargar_spec(sesion, workspace, contenido, usuario))
 
 
+@router.get("/operaciones", response_model=list[str])
+def listar_operaciones() -> list[str]:
+    """Nombres de las operaciones granulares disponibles sobre el dashboard."""
+    from app.dashboard.edicion import OPERACIONES
+
+    return list(OPERACIONES)
+
+
+@router.post("/operaciones", response_model=DashboardSalida, status_code=status.HTTP_201_CREATED)
+def aplicar_operacion(
+    contenido: dict[str, Any] = Body(..., description='{"operacion": "crear_grafico", ...parametros}'),
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+) -> DashboardSalida:
+    """Una operación granular sobre el dashboard (chat constructor, paso 20;
+    mismo mecanismo que `POST /modelo/operaciones` del paso 12): valida,
+    aplica sobre la versión actual y crea una versión nueva. E-SPEC-07 si la
+    operación no existe, E-SPEC-08 si no se puede aplicar, E-SPEC-01 si el
+    dashboard resultante no valida."""
+    return _salida(sesion, workspace, operaciones.aplicar_y_guardar(sesion, workspace, contenido, usuario))
+
+
 @router.post("/proponer", response_model=TareaSalida, status_code=status.HTTP_202_ACCEPTED)
 def proponer_spec(
     workspace: Workspace = Depends(workspace_del_usuario),

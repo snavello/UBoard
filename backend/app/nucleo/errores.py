@@ -65,6 +65,8 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-SPEC-04": (404, "Ese filtro, gráfico o pestaña no está en el dashboard."),
     "E-SPEC-05": (400, "El modelo todavía no tiene nada confirmado: confirmá algo en Modelo antes de proponer el dashboard."),
     "E-SPEC-06": (500, "El dashboard propuesto no pasó la validación. Revisá el detalle."),
+    "E-SPEC-07": (400, "Operación desconocida o con parámetros inválidos."),
+    "E-SPEC-08": (400, "Esa operación no se puede aplicar sobre el dashboard actual."),
     "E-INTERNO-00": (500, "Algo salió mal de nuestro lado. Probá de nuevo en un momento."),
 }
 
