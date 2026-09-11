@@ -622,3 +622,10 @@ del compose, misma organización, misma versión del spec.
 
 `docs/fase2-aceptacion.md` y CLAUDE.md actualizados: Docker queda
 confirmado end to end, sin pendientes de infraestructura para la fase 2.
+
+## 2026-09-10 — Fase 2 aceptada; arranque de la fase 3
+
+Sd aceptó la fase 2 ("ok fase 3"). Arranca la fase 3 (chat constructor,
+preguntas del visualizador, historial y deshacer, expresiones aritméticas
+libres): primero la lectura, dudas, decisiones y plan, como en las fases
+anteriores.

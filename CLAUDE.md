@@ -314,8 +314,9 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     resto de la config de Claude) al contenedor `app`, así que la
     inferencia en Docker quedaba siempre en modo heurístico puro, en
     silencio. Corregido (v0.15.02).
-  - **Fase 2 completa, pendiente de la aceptación de Sd.**
-- Fases 3 y 4: no empezadas.
+  - **Fase 2 aceptada por Sd el 2026-09-10.**
+- **Fase 3 — Asistente: EN CURSO.**
+- Fase 4: no empezada.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
