@@ -24,8 +24,10 @@ from app.modelo.esquema import (
     Entidad,
     ExpresionAgregacion,
     ExpresionCociente,
+    ExpresionFormula,
     Metrica,
     ModeloSemantico,
+    Operando,
     Relacion,
 )
 from app.nucleo.errores import ErrorApp
@@ -46,6 +48,7 @@ REL_CAMPO_NO_EFECTIVO = "MOD-REL-CAMPO-NO-EFECTIVO"
 MET_CAMPO = "MOD-MET-CAMPO"
 MET_AGREGACION = "MOD-MET-AGREGACION"
 MET_COCIENTE = "MOD-MET-COCIENTE"
+MET_FORMULA = "MOD-MET-FORMULA"
 MET_CAMPO_NO_EFECTIVO = "MOD-MET-CAMPO-NO-EFECTIVO"
 TIEMPO_CAMPO = "MOD-TIEMPO-CAMPO"
 TIEMPO_TIPO = "MOD-TIEMPO-TIPO"
@@ -117,8 +120,21 @@ def metrica_efectiva(metrica: Metrica, modelo: ModeloSemantico, vistas: set[str]
     vistas = vistas or set()
     if metrica.id in vistas:
         return False
-    partes = (modelo.metrica(metrica.expresion.numerador), modelo.metrica(metrica.expresion.denominador))
-    return all(parte is not None and metrica_efectiva(parte, modelo, vistas | {metrica.id}) for parte in partes)
+    if isinstance(metrica.expresion, ExpresionCociente):
+        partes = (modelo.metrica(metrica.expresion.numerador), modelo.metrica(metrica.expresion.denominador))
+        return all(parte is not None and metrica_efectiva(parte, modelo, vistas | {metrica.id}) for parte in partes)
+    return _operando_efectivo(metrica.expresion.izquierda, modelo, vistas | {metrica.id}) and _operando_efectivo(
+        metrica.expresion.derecha, modelo, vistas | {metrica.id}
+    )
+
+
+def _operando_efectivo(operando: Operando, modelo: ModeloSemantico, vistas: set[str]) -> bool:
+    if isinstance(operando, ExpresionFormula):
+        return _operando_efectivo(operando.izquierda, modelo, vistas) and _operando_efectivo(operando.derecha, modelo, vistas)
+    if isinstance(operando, (int, float)):
+        return True
+    otra = modelo.metrica(operando)
+    return otra is not None and metrica_efectiva(otra, modelo, vistas)
 
 
 def modelo_efectivo(modelo: ModeloSemantico) -> ModeloSemantico:
@@ -312,8 +328,10 @@ def _validar_metricas(modelo: ModeloSemantico) -> list[ErrorValidacion]:
                 errores.append(ErrorValidacion(MET_AGREGACION, ubicacion, f"'{expresion.agregacion}' necesita un campo numérico o de fecha y '{expresion.campo}' es {campo.tipo_dato}."))
             if metrica.estado == "confirmada" and not campo_efectivo(campo, modelo):
                 errores.append(ErrorValidacion(MET_CAMPO_NO_EFECTIVO, ubicacion, f"La métrica '{metrica.id}' está confirmada pero '{expresion.campo}' está rechazado o sin confirmar."))
-        else:
+        elif isinstance(expresion, ExpresionCociente):
             errores += _validar_cociente(metrica, expresion, modelo)
+        else:
+            errores += _validar_formula(metrica, expresion, modelo)
     return errores
 
 
@@ -332,6 +350,42 @@ def _validar_cociente(metrica: Metrica, expresion: ExpresionCociente, modelo: Mo
         elif metrica.estado == "confirmada" and not metrica_efectiva(otra, modelo):
             errores.append(ErrorValidacion(MET_CAMPO_NO_EFECTIVO, ubicacion, f"La métrica '{metrica.id}' está confirmada pero su {rol} '{referencia}' no."))
     return errores
+
+
+def _validar_formula(metrica: Metrica, expresion: ExpresionFormula, modelo: ModeloSemantico) -> list[ErrorValidacion]:
+    errores: list[ErrorValidacion] = []
+    _validar_operando(metrica, expresion.izquierda, modelo, {metrica.id}, errores)
+    _validar_operando(metrica, expresion.derecha, modelo, {metrica.id}, errores)
+    return errores
+
+
+def _validar_operando(metrica: Metrica, operando: Operando, modelo: ModeloSemantico, vistos: set[str], errores: list[ErrorValidacion]) -> None:
+    """Recorre un operando de formula: un numero no necesita nada, una formula
+    embebida se recorre igual, y un id de metrica se valida (existe, no es un
+    cociente, esta efectiva si la metrica esta confirmada) y sigue bajando si
+    a su vez es otra formula, llevando `vistos` para cortar los ciclos."""
+    ubicacion = f"metricas.{metrica.id}"
+    if isinstance(operando, ExpresionFormula):
+        _validar_operando(metrica, operando.izquierda, modelo, vistos, errores)
+        _validar_operando(metrica, operando.derecha, modelo, vistos, errores)
+        return
+    if isinstance(operando, (int, float)):
+        return
+    if operando in vistos:
+        errores.append(ErrorValidacion(MET_FORMULA, ubicacion, f"La fórmula de '{metrica.id}' tiene un ciclo: '{operando}' se termina referenciando a sí misma."))
+        return
+    otra = modelo.metrica(operando)
+    if otra is None:
+        errores.append(ErrorValidacion(MET_FORMULA, ubicacion, f"La fórmula de '{metrica.id}' usa '{operando}', que no es una métrica del modelo."))
+        return
+    if isinstance(otra.expresion, ExpresionCociente):
+        errores.append(ErrorValidacion(MET_FORMULA, ubicacion, f"La fórmula de '{metrica.id}' usa '{operando}', que es un cociente; en v1 las fórmulas no dividen cocientes."))
+        return
+    if metrica.estado == "confirmada" and not metrica_efectiva(otra, modelo):
+        errores.append(ErrorValidacion(MET_CAMPO_NO_EFECTIVO, ubicacion, f"La métrica '{metrica.id}' está confirmada pero '{operando}' no."))
+    if isinstance(otra.expresion, ExpresionFormula):
+        _validar_operando(metrica, otra.expresion.izquierda, modelo, vistos | {operando}, errores)
+        _validar_operando(metrica, otra.expresion.derecha, modelo, vistos | {operando}, errores)
 
 
 def _validar_dimensiones_tiempo(modelo: ModeloSemantico) -> list[ErrorValidacion]:

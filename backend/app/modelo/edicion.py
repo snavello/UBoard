@@ -24,12 +24,14 @@ from app.modelo.esquema import (
     Entidad,
     ExpresionAgregacion,
     ExpresionCociente,
+    ExpresionFormula,
     ExtremoRelacion,
     Formato,
     Granularidad,
     IdCorto,
     Metrica,
     ModeloSemantico,
+    Operando,
     RefCampo,
     Relacion,
     TipoEntidad,
@@ -131,7 +133,7 @@ class CrearMetrica(_Base):
     operacion: Literal["crear_metrica"]
     id: IdCorto
     nombre: str = Field(min_length=1, max_length=80)
-    expresion: ExpresionAgregacion | ExpresionCociente
+    expresion: ExpresionAgregacion | ExpresionCociente | ExpresionFormula
     formato: Formato = "decimal"
     descripcion: str | None = None
 
@@ -140,7 +142,7 @@ class EditarMetrica(_Base):
     operacion: Literal["editar_metrica"]
     metrica: IdCorto
     nombre: str | None = Field(default=None, min_length=1, max_length=80)
-    expresion: ExpresionAgregacion | ExpresionCociente | None = None
+    expresion: ExpresionAgregacion | ExpresionCociente | ExpresionFormula | None = None
     formato: Formato | None = None
     descripcion: str | None = None
 
@@ -418,14 +420,9 @@ def aplicar_operacion(modelo: ModeloSemantico, operacion: Operacion) -> tuple[Mo
 
         case EliminarMetrica():
             _metrica(modelo, operacion.metrica)
-            usada_por = [
-                metrica.id
-                for metrica in modelo.metricas
-                if isinstance(metrica.expresion, ExpresionCociente)
-                and operacion.metrica in (metrica.expresion.numerador, metrica.expresion.denominador)
-            ]
+            usada_por = [metrica.id for metrica in modelo.metricas if _referencia_metrica(metrica.expresion, operacion.metrica)]
             if usada_por:
-                raise ErrorApp("E-MOD-05", f"la métrica '{operacion.metrica}' la usan los cocientes: {', '.join(usada_por)}")
+                raise ErrorApp("E-MOD-05", f"la métrica '{operacion.metrica}' la usan: {', '.join(usada_por)}")
             modelo.metricas = [metrica for metrica in modelo.metricas if metrica.id != operacion.metrica]
             return modelo, f"Métrica '{operacion.metrica}' eliminada"
 
@@ -489,5 +486,35 @@ def aplicar_operacion(modelo: ModeloSemantico, operacion: Operacion) -> tuple[Mo
 def _metrica_de_entidad(modelo: ModeloSemantico, metrica: Metrica, entidad_id: str) -> bool:
     if isinstance(metrica.expresion, ExpresionAgregacion):
         return metrica.expresion.campo.startswith(f"{entidad_id}.")
-    partes = [modelo.metrica(metrica.expresion.numerador), modelo.metrica(metrica.expresion.denominador)]
-    return any(parte is not None and _metrica_de_entidad(modelo, parte, entidad_id) for parte in partes)
+    if isinstance(metrica.expresion, ExpresionCociente):
+        partes = [modelo.metrica(metrica.expresion.numerador), modelo.metrica(metrica.expresion.denominador)]
+        return any(parte is not None and _metrica_de_entidad(modelo, parte, entidad_id) for parte in partes)
+    return _operando_de_entidad(modelo, metrica.expresion.izquierda, entidad_id) or _operando_de_entidad(modelo, metrica.expresion.derecha, entidad_id)
+
+
+def _operando_de_entidad(modelo: ModeloSemantico, operando: Operando, entidad_id: str) -> bool:
+    if isinstance(operando, ExpresionFormula):
+        return _operando_de_entidad(modelo, operando.izquierda, entidad_id) or _operando_de_entidad(modelo, operando.derecha, entidad_id)
+    if isinstance(operando, (int, float)):
+        return False
+    otra = modelo.metrica(operando)
+    return otra is not None and _metrica_de_entidad(modelo, otra, entidad_id)
+
+
+def _referencia_metrica(expresion: ExpresionAgregacion | ExpresionCociente | ExpresionFormula, metrica_id: str) -> bool:
+    """Si una metrica usa a otra por su id, en un cociente o en cualquier
+    parte de una formula (embebida o por referencia): sirve para saber a
+    quien le rompe el modelo eliminar `metrica_id`."""
+    if isinstance(expresion, ExpresionCociente):
+        return metrica_id in (expresion.numerador, expresion.denominador)
+    if isinstance(expresion, ExpresionFormula):
+        return _operando_referencia(expresion.izquierda, metrica_id) or _operando_referencia(expresion.derecha, metrica_id)
+    return False
+
+
+def _operando_referencia(operando: Operando, metrica_id: str) -> bool:
+    if isinstance(operando, ExpresionFormula):
+        return _operando_referencia(operando.izquierda, metrica_id) or _operando_referencia(operando.derecha, metrica_id)
+    if isinstance(operando, (int, float)):
+        return False
+    return operando == metrica_id

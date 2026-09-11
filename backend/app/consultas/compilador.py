@@ -20,7 +20,10 @@ Es el UNICO lugar donde el modelo se convierte en SQL. Reglas:
   por las dimensiones (IS NOT DISTINCT FROM, para que NULL case con NULL). Con
   `entidad_base` (explorador) la lista de filas sale de esa entidad y las
   metricas se le pegan con LEFT JOIN: aparecen todas, con metricas NULL.
-- Los cocientes se calculan afuera: numerador / NULLIF(denominador, 0).
+- Los cocientes se calculan afuera: numerador / NULLIF(denominador, 0). Las
+  formulas (suma, resta, multiplicacion, division entre metricas y
+  constantes) se arman igual, recorriendo el arbol; cada division anidada
+  lleva su propio NULLIF.
 - Los valores de los filtros van SIEMPRE como parametros (?), con CAST al tipo
   del campo.
 """
@@ -37,12 +40,15 @@ from app.modelo.esquema import (
     Entidad,
     ExpresionAgregacion,
     ExpresionCociente,
+    ExpresionFormula,
     Metrica,
     ModeloSemantico,
+    Operando,
     Relacion,
 )
 from app.nucleo.errores import ErrorApp
 
+OPERADOR_FORMULA_SQL = {"suma": "+", "resta": "-", "multiplicacion": "*", "division": "/"}
 AGREGACION_SQL = {
     "suma": "SUM({})",
     "conteo": "COUNT({})",
@@ -153,6 +159,25 @@ class Compilador:
         entidad, campo = self._campo(metrica.expresion.campo)
         return _Agregacion(metrica, entidad, campo, metrica.expresion)
 
+    def _recolectar_agregaciones(self, operando: Operando, agregaciones: dict[str, _Agregacion]) -> None:
+        """Baja un arbol de formula hasta sus metricas de agregacion (las que
+        de verdad hay que calcular en una subconsulta): una formula puede
+        referenciar otra formula por id, y esa a su vez otra, sin limite."""
+        if isinstance(operando, ExpresionFormula):
+            self._recolectar_agregaciones(operando.izquierda, agregaciones)
+            self._recolectar_agregaciones(operando.derecha, agregaciones)
+            return
+        if isinstance(operando, (int, float)):
+            return
+        metrica = self._metrica(operando)
+        if isinstance(metrica.expresion, ExpresionAgregacion):
+            agregaciones.setdefault(metrica.id, self._agregacion(metrica))
+        elif isinstance(metrica.expresion, ExpresionFormula):
+            self._recolectar_agregaciones(metrica.expresion.izquierda, agregaciones)
+            self._recolectar_agregaciones(metrica.expresion.derecha, agregaciones)
+        else:
+            raise ErrorApp("E-CONS-01", f"la metrica {metrica.id!r} no se puede usar en una formula")
+
     def _dimension(self, pedida: DimensionConsulta) -> _Dimension:
         entidad, campo = self._campo(pedida.campo)
         if pedida.granularidad is not None:
@@ -196,12 +221,14 @@ class Compilador:
             raise ErrorApp("E-CONS-06", "dos dimensiones con el mismo alias")
 
         metricas = [self._metrica(metrica_id) for metrica_id in consulta.metricas]
-        # Agregaciones necesarias: las pedidas mas las que componen los cocientes
+        # Agregaciones necesarias: las pedidas mas las que componen cocientes y formulas
         agregaciones: dict[str, _Agregacion] = {}
         for metrica in metricas:
             if isinstance(metrica.expresion, ExpresionCociente):
                 for parte in (metrica.expresion.numerador, metrica.expresion.denominador):
                     agregaciones.setdefault(parte, self._agregacion(self._metrica(parte)))
+            elif isinstance(metrica.expresion, ExpresionFormula):
+                self._recolectar_agregaciones(metrica.expresion, agregaciones)
             else:
                 agregaciones.setdefault(metrica.id, self._agregacion(metrica))
 
@@ -404,6 +431,8 @@ class Compilador:
                 numerador = f"{alias_de_agregacion[metrica.expresion.numerador]}.{identificador(metrica.expresion.numerador)}"
                 denominador = f"{alias_de_agregacion[metrica.expresion.denominador]}.{identificador(metrica.expresion.denominador)}"
                 seleccion.append(f"CAST({numerador} AS DOUBLE) / NULLIF({denominador}, 0) AS {identificador(metrica.id)}")
+            elif isinstance(metrica.expresion, ExpresionFormula):
+                seleccion.append(f"{self._renderizar_formula(metrica.expresion, alias_de_agregacion)} AS {identificador(metrica.id)}")
             else:
                 seleccion.append(f"{alias_de_agregacion[metrica.id]}.{identificador(metrica.id)} AS {identificador(metrica.id)}")
             columnas.append(ColumnaResultado(metrica.id, self._tipo_metrica(metrica), "metrica"))
@@ -426,9 +455,29 @@ class Compilador:
             sql += f" OFFSET {consulta.desplazamiento}"
         return SQLCompilado(sql, parametros, columnas)
 
+    def _renderizar_formula(self, expresion: ExpresionFormula, alias_de_agregacion: dict[str, str]) -> str:
+        izquierda = self._renderizar_operando(expresion.izquierda, alias_de_agregacion)
+        derecha = self._renderizar_operando(expresion.derecha, alias_de_agregacion)
+        if expresion.operacion == "division":
+            return f"({izquierda} / NULLIF({derecha}, 0))"
+        return f"({izquierda} {OPERADOR_FORMULA_SQL[expresion.operacion]} {derecha})"
+
+    def _renderizar_operando(self, operando: Operando, alias_de_agregacion: dict[str, str]) -> str:
+        if isinstance(operando, ExpresionFormula):
+            return self._renderizar_formula(operando, alias_de_agregacion)
+        if isinstance(operando, (int, float)):
+            return repr(float(operando))
+        metrica = self._metrica(operando)
+        if isinstance(metrica.expresion, ExpresionAgregacion):
+            alias_cte = alias_de_agregacion[metrica.id]
+            return f"CAST({alias_cte}.{identificador(metrica.id)} AS DOUBLE)"
+        if isinstance(metrica.expresion, ExpresionFormula):
+            return self._renderizar_formula(metrica.expresion, alias_de_agregacion)
+        raise ErrorApp("E-CONS-01", f"la metrica {metrica.id!r} no se puede usar en una formula")
+
     def _tipo_metrica(self, metrica: Metrica) -> str:
         expresion = metrica.expresion
-        if isinstance(expresion, ExpresionCociente):
+        if isinstance(expresion, (ExpresionCociente, ExpresionFormula)):
             return "decimal"
         _, campo = self._campo(expresion.campo)
         if expresion.agregacion in ("conteo", "conteo_distinto"):

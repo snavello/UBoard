@@ -154,6 +154,12 @@ def test_metricas(modelo):
     assert nuevo.metrica("descuento_promedio").nombre == "Precio medio" and nuevo.metrica("descuento_promedio").formato == "decimal"
     assert nuevo.metrica("descuento_promedio").expresion.agregacion == "promedio", "lo no enviado no cambia"
 
+    nuevo, _ = aplicar(
+        nuevo, operacion="editar_metrica", metrica="descuento_promedio", expresion={"operacion": "division", "izquierda": "cantidad_ventas", "derecha": 2.0}
+    )
+    assert nuevo.metrica("descuento_promedio").expresion.operacion == "division"
+    assert validar_estructura(nuevo) == []
+
     nuevo, _ = aplicar(nuevo, operacion="rechazar_metrica", metrica="cuotas_promedio")
     assert nuevo.metrica("cuotas_promedio").estado == "rechazada"
     nuevo, _ = aplicar(nuevo, operacion="confirmar_metrica", metrica="cuotas_promedio")
@@ -163,6 +169,23 @@ def test_metricas(modelo):
         aplicar(nuevo, operacion="eliminar_metrica", metrica="total_ventas")
     assert "ticket_promedio" in error.value.detalle, "la usa un cociente"
     nuevo, _ = aplicar(nuevo, operacion="eliminar_metrica", metrica="ticket_promedio")
+
+    nuevo, resumen = aplicar(
+        nuevo,
+        operacion="crear_metrica",
+        id="margen",
+        nombre="Margen",
+        expresion={"operacion": "resta", "izquierda": "total_ventas", "derecha": "total_pagado"},
+        formato="moneda",
+    )
+    assert nuevo.metrica("margen").expresion.operacion == "resta" and "margen" in resumen
+    assert validar_estructura(nuevo) == []
+
+    with pytest.raises(ErrorApp) as error:
+        aplicar(nuevo, operacion="eliminar_metrica", metrica="total_ventas")
+    assert "margen" in error.value.detalle, "la usa la formula"
+    nuevo, _ = aplicar(nuevo, operacion="eliminar_metrica", metrica="margen")
+
     nuevo, _ = aplicar(nuevo, operacion="eliminar_metrica", metrica="total_ventas")
     assert nuevo.metrica("total_ventas") is None
     with pytest.raises(ErrorApp):

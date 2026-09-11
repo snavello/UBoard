@@ -119,7 +119,7 @@ Todas del 2026-09-08, al arrancar la fase 1 (detalle en `HISTORIAL.md`):
 - Rol `plataforma` con pantalla de altas desde la fase 1 (pedido de Sd).
 - Métricas: agregación simple (`suma`, `conteo`, `conteo_distinto`,
   `promedio`, `minimo`, `maximo`) y `cociente` entre dos métricas. Expresiones
-  aritméticas libres entre métricas: **pendiente**, Sd las quiere más adelante.
+  aritméticas libres entre métricas: desde el paso 18 de la fase 3 (`ExpresionFormula`).
 - Explorador: columnas `campo` propio o `entidad.campo` relacionado, explícito.
 - Filtros de fase 1: `rango_fecha` y `lista`. Granularidades: `dia`,
   `semana`, `mes`, `trimestre`, `anio`.
@@ -343,7 +343,40 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     en Docker contra la demo real: restaurar y volver a restaurar,
     contenido correcto en ambos sentidos; la demo quedó como estaba. 3
     tests nuevos (309 en total).
-  - Pasos 18 a 22: pendientes.
+  - Paso 18 (expresiones aritméticas): HECHO 2026-09-11 (v0.18.01).
+    `modelo/esquema.py`: `ExpresionFormula { operacion: suma|resta|
+    multiplicacion|division, izquierda, derecha }`, `Operando = IdCorto |
+    float | ExpresionFormula` (árbol recursivo con `model_rebuild()`);
+    `Metrica.expresion` suma este tercer caso a los de siempre. Un operando
+    `IdCorto` referencia otra métrica (de agregación o a su vez otra
+    fórmula, nunca un cociente); anidar es o bien referenciar por id una
+    métrica que ya es fórmula, o embeber una `ExpresionFormula` directa
+    como operando (para el chat de la fase 3, que puede armar el árbol
+    entero de una). `modelo/validacion.py`: `MOD-MET-FORMULA` nuevo
+    (referencia inexistente, cociente prohibido, ciclos: mismo mecanismo de
+    `vistos`/`vistas` que ya cortaba los ciclos de cociente, generalizado a
+    recorrer el árbol); `metrica_efectiva` generalizada igual.
+    `consultas/compilador.py`: `_recolectar_agregaciones` baja el árbol
+    (incluyendo métricas-fórmula referenciadas por id) hasta las métricas de
+    agregación que hay que calcular en una subconsulta; `_renderizar_formula`
+    arma la expresión SQL recorriendo el árbol, expandiendo en línea las
+    métricas-fórmula referenciadas (no necesitan CTE propio, son aritmética
+    pura sobre lo ya agregado) y con su propio `NULLIF(..., 0)` en cada nodo
+    de división. `modelo/edicion.py`: `crear_metrica`/`editar_metrica`
+    aceptan el tercer tipo de expresión sin cambios en la operación misma;
+    `eliminar_metrica` generaliza el chequeo de "quién me usa" (antes solo
+    miraba cocientes) a también encontrar referencias dentro de fórmulas,
+    embebidas o anidadas. Wizard (`Revision.tsx`): tercer tipo "Fórmula" en
+    "Crear una métrica", con selector de operador y un `CampoOperando` por
+    lado (métrica existente o constante numérica); anidar se hace creando
+    primero la fórmula interna como métrica y usándola después como
+    operando de otra (no hay editor de árbol completo, como estaba
+    decidido). Probado en Docker con una organización descartable: creada
+    `margen = total_ventas − total_pagado` y anidada `margen_doble = margen
+    × 2`, confirmadas en el wizard, y verificado el valor real vía KPI del
+    dashboard (compilado y ejecutado contra Postgres/DuckDB, no solo
+    validado). 9 tests nuevos (318 en total).
+  - Pasos 19 a 22: pendientes.
 - Fase 4: no empezada.
 
 ## Accesos de la demo local
@@ -598,7 +631,12 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   `operacion` (`cargar_json` hoy), `diff` (ids agregados/quitados/cambiados
   por colección) y `resumen`. La versión actual es la de mayor `numero`.
 - **Cociente** = numerador / denominador entre ids de métricas de agregación
-  (no anidados). Las expresiones aritméticas libres siguen pendientes.
+  (no anidados). **Fórmula** (desde el paso 18): árbol de suma/resta/
+  multiplicación/división entre operandos, cada uno un id de otra métrica
+  (de agregación o de otra fórmula, nunca un cociente), una constante
+  numérica o, embebida, otra `ExpresionFormula`; se valida sin ciclos
+  (mismo mecanismo de `vistos` que corta la auto-referencia del cociente,
+  generalizado a recorrer el árbol) y sin referenciar cocientes.
 
 ## Reglas del compilador (vigentes desde el paso 5)
 - **Nadie escribe SQL fuera de `consultas/compilador.py`.** KPIs, gráficos,
@@ -620,6 +658,10 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   esa entidad (todas, aunque no tengan hechos) y las métricas se pegan con
   LEFT JOIN; sin `entidad_base`, solo aparecen las combinaciones con datos.
 - **Cociente** se calcula afuera: `CAST(num AS DOUBLE) / NULLIF(den, 0)`.
+  **Fórmula** igual: se arma recorriendo el árbol (`_renderizar_formula`),
+  expandiendo en línea cada métrica-fórmula referenciada por id (no lleva
+  CTE propio, es aritmética sobre subconsultas ya agregadas) y con
+  `NULLIF(..., 0)` en cada división, por anidada que esté.
 - **Valores de filtro siempre como parámetros `?`** con `CAST(? AS tipo)`
   según `tipo_dato`; nunca literales en el SQL. Operadores: igual, distinto,
   en, entre (extremos abiertos con null), mayor(_igual), menor(_igual),

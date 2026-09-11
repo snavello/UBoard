@@ -686,3 +686,81 @@ esperado — nunca se pisa el historial.
 
 309 tests backend en verde por archivo, build y vitest del frontend sin
 cambios.
+
+## 2026-09-11 — Fase 3, paso 18: expresiones aritméticas libres (v0.18.01)
+
+Hasta acá una métrica derivada solo podía ser un `cociente` entre dos
+agregaciones. Sd las quería desde antes de arrancar la fase 1 ("Expresiones
+aritméticas libres entre métricas: pendiente, Sd las quiere más adelante",
+quedó anotado en las decisiones de esa fase) y las confirmó para esta fase
+en la duda 7 del plan: suma, resta, multiplicación y división alcanzan, en
+forma de árbol tipado — nunca una fórmula en texto libre, para poder
+validarla siempre y que el chat (paso 20) nunca escriba algo que no se sepa
+traducir a SQL con seguridad.
+
+`ExpresionFormula` en `modelo/esquema.py` es un árbol recursivo
+(`operacion`, `izquierda`, `derecha`), con `Operando = IdCorto | float |
+ExpresionFormula` — Pydantic v2 lo resuelve con un forward ref de texto
+("Operando") más `model_rebuild()` después de declarar el alias, porque el
+alias y la clase se referencian entre sí. Un operando que es un id
+referencia otra métrica del modelo (de agregación o, para anidar, otra
+fórmula); nunca un cociente, la misma restricción que ya tenía el cociente
+contra anidarse a sí mismo. Para anidar más de un nivel hay dos caminos: o
+se referencia por id una métrica que ya es una fórmula guardada (lo que
+hace el wizard: crear primero `margen`, después crear `margen_doble` que
+usa `margen` como operando), o se embebe una `ExpresionFormula` entera como
+uno de los dos operandos (pensado para el chat, que en un solo pedido de
+Claude puede mandar el árbol completo sin pasar por metricas intermedias).
+
+La validación (`_validar_formula`/`_validar_operando`) recorre el árbol
+bajando por las referencias, con un `vistos: set[str]` que arranca en
+`{metrica.id}` y va sumando cada id que se cruza: si un id ya está en el
+set, es un ciclo (`MOD-MET-FORMULA`), directo o a través de varias métricas
+intermedias. Es exactamente el mecanismo que el cociente ya usaba para no
+referenciarse a sí mismo, generalizado de "un salto" a "cualquier
+profundidad". `metrica_efectiva` se generalizó igual, con el mismo patrón
+de `vistas` que evita el loop infinito si hay un ciclo (no debería llegar a
+pasar si la validación corrió antes, pero la función no confía en eso).
+
+El compilador tenía el mecanismo del cociente concentrado en dos lugares:
+"qué hay que agregar en una subconsulta" y "qué expresión SQL armar
+después de agregar". Para fórmula se generalizaron los dos:
+`_recolectar_agregaciones` baja el árbol (incluyendo las métricas-fórmula
+referenciadas por id, que no se agregan directo pero hay que seguir
+bajando por ellas) hasta encontrar las métricas de agregación de verdad, y
+`_renderizar_formula`/`_renderizar_operando` arman la expresión SQL
+recorriendo el mismo árbol: una métrica-fórmula referenciada por id no
+necesita su propio CTE ni JOIN, se expande en línea porque es aritmética
+pura sobre columnas ya agregadas (igual filosofía que el cociente, "se
+calcula afuera"). Cada nodo de división lleva su propio
+`NULLIF(..., 0)`, así que una división anidada adentro de una resta no
+rompe todo si el denominador da cero.
+
+`modelo/edicion.py` no necesitó una operación nueva: `crear_metrica` y
+`editar_metrica` ya recibían `expresion` como el tipo Union de siempre, se
+le sumó `ExpresionFormula`. Lo que sí se generalizó fue el chequeo de
+`eliminar_metrica` ("¿alguien me usa?"): antes solo miraba cocientes,
+ahora también encuentra una referencia adentro de cualquier fórmula, sea
+directa, anidada por id o embebida.
+
+En el wizard (`Revision.tsx`), "Crear una métrica" suma un tercer tipo,
+"Fórmula", con un select de operador y un `CampoOperando` por lado (elegir
+entre "Métrica" — un select con las métricas existentes, ahí aparece
+`margen` en cuanto existe — o "Número" — una constante). Anidar es
+simplemente crear la fórmula interna primero y después elegirla como
+operando de otra, sin editor de árbol.
+
+Probado en Docker con una organización descartable (`PruebaFormula`, sin
+`--inferir`, solo para no gastar de la cuenta de Claude): en el wizard se
+creó `margen = total_ventas − total_pagado` y, anidada, `margen_doble =
+margen × 2`; las dos quedaron confirmadas y con el resumen legible
+esperado (`margen × 2,00`). Para no quedarse solo con la validación se
+armaron además dos KPIs de dashboard apuntando a esas métricas por la API
+directa y se confirmó el valor real, compilado y ejecutado contra
+Postgres/DuckDB (margen ≈ 0, porque en los datos sintéticos lo pagado
+coincide con lo facturado; margen_doble ≈ 2×margen), y se vio el mismo
+número en el Tablero. La organización de prueba se borró al terminar.
+
+318 tests backend en verde por archivo (9 nuevos: 8 de validación y
+compilador más las extensiones a los de edición), build y vitest del
+frontend sin cambios.

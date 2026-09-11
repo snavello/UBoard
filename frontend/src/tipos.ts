@@ -196,10 +196,23 @@ export interface ExpresionCociente {
   denominador: string;
 }
 
+export type OperacionFormula = "suma" | "resta" | "multiplicacion" | "division";
+
+// Un operando es el id de otra metrica, una constante, o (para anidar) otra formula embebida.
+export type Operando = string | number | ExpresionFormula;
+
+export interface ExpresionFormula {
+  operacion: OperacionFormula;
+  izquierda: Operando;
+  derecha: Operando;
+}
+
+export type ExpresionMetrica = ExpresionAgregacion | ExpresionCociente | ExpresionFormula;
+
 export interface MetricaModelo {
   id: string;
   nombre: string;
-  expresion: ExpresionAgregacion | ExpresionCociente;
+  expresion: ExpresionMetrica;
   formato: Formato;
   confianza: number;
   origen: OrigenCampo;
@@ -221,8 +234,16 @@ export interface ModeloSemantico {
   umbral_confianza: number;
 }
 
-export function esExpresionAgregacion(expresion: ExpresionAgregacion | ExpresionCociente): expresion is ExpresionAgregacion {
+export function esExpresionAgregacion(expresion: ExpresionMetrica): expresion is ExpresionAgregacion {
   return "agregacion" in expresion;
+}
+
+export function esExpresionCociente(expresion: ExpresionMetrica): expresion is ExpresionCociente {
+  return "numerador" in expresion;
+}
+
+export function esExpresionFormula(expresion: ExpresionMetrica): expresion is ExpresionFormula {
+  return "operacion" in expresion;
 }
 
 export interface VersionResumen {

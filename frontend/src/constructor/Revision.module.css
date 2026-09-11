@@ -21,6 +21,7 @@
 .crear { border: 1px solid var(--linea); border-radius: var(--radio); padding: 10px 14px; }
 .crear summary { cursor: pointer; font-size: 14px; color: var(--tinta-2); }
 .formCrear { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.operando { display: inline-flex; gap: 8px; }
 .checkboxes { display: flex; flex-wrap: wrap; gap: 10px; }
 .checkbox { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
 .proponerDashboard { padding: 18px 20px; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--superficie); align-items: flex-start; }

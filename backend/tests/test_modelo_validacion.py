@@ -225,6 +225,58 @@ def test_cociente_confirmado_sobre_metrica_propuesta(modelo):
     assert _errores(modelo) == [validacion.MET_CAMPO_NO_EFECTIVO]
 
 
+# ---------- Formulas ----------
+def test_formula_valida_entre_metricas_de_dos_entidades(modelo):
+    modelo["metricas"].append({"id": "margen", "nombre": "Margen", "expresion": {"operacion": "resta", "izquierda": "total_ventas", "derecha": "total_pagado"}})
+    assert _errores(modelo) == []
+    assert modelo_efectivo(parsear_modelo(modelo)).metrica("margen") is not None
+
+
+def test_formula_anidada_referenciando_otra_formula(modelo):
+    modelo["metricas"].append({"id": "margen", "nombre": "Margen", "expresion": {"operacion": "resta", "izquierda": "total_ventas", "derecha": "total_pagado"}})
+    modelo["metricas"].append({"id": "margen_doble", "nombre": "Margen doble", "expresion": {"operacion": "multiplicacion", "izquierda": "margen", "derecha": 2.0}})
+    assert _errores(modelo) == []
+
+
+def test_formula_con_expresion_embebida():
+    modelo = copy.deepcopy(MODELO_BASE)
+    modelo["metricas"].append(
+        {
+            "id": "margen_ajustado",
+            "nombre": "Margen ajustado",
+            "expresion": {"operacion": "suma", "izquierda": {"operacion": "resta", "izquierda": "total_ventas", "derecha": "total_pagado"}, "derecha": 100.0},
+        }
+    )
+    assert _errores(modelo) == []
+
+
+def test_formula_referencia_inexistente(modelo):
+    modelo["metricas"].append({"id": "margen", "nombre": "Margen", "expresion": {"operacion": "resta", "izquierda": "total_ventas", "derecha": "no_existe"}})
+    assert _errores(modelo) == [validacion.MET_FORMULA]
+
+
+def test_formula_no_puede_referenciar_un_cociente(modelo):
+    modelo["metricas"].append({"id": "x", "nombre": "X", "expresion": {"operacion": "suma", "izquierda": "ticket_promedio", "derecha": 1.0}})
+    assert _errores(modelo) == [validacion.MET_FORMULA]
+
+
+def test_formula_con_ciclo_directo_e_indirecto():
+    modelo = copy.deepcopy(MODELO_BASE)
+    modelo["metricas"].append({"id": "a", "nombre": "A", "expresion": {"operacion": "suma", "izquierda": "a", "derecha": 1.0}})
+    assert _errores(modelo) == [validacion.MET_FORMULA]
+
+    modelo = copy.deepcopy(MODELO_BASE)
+    modelo["metricas"].append({"id": "a", "nombre": "A", "expresion": {"operacion": "suma", "izquierda": "b", "derecha": 1.0}})
+    modelo["metricas"].append({"id": "b", "nombre": "B", "expresion": {"operacion": "resta", "izquierda": "a", "derecha": 1.0}})
+    assert validacion.MET_FORMULA in _errores(modelo)
+
+
+def test_formula_confirmada_sobre_metrica_propuesta(modelo):
+    modelo["metricas"].append({"id": "margen", "nombre": "Margen", "expresion": {"operacion": "resta", "izquierda": "total_ventas", "derecha": "total_pagado"}})
+    _metrica(modelo, "total_pagado")["estado"] = "propuesta"
+    assert _errores(modelo) == [validacion.MET_CAMPO_NO_EFECTIVO]
+
+
 # ---------- Dimensiones de tiempo ----------
 def test_dimension_de_tiempo_invalida(modelo):
     modelo["dimensiones_tiempo"][0]["campo"] = "ventas.nada"

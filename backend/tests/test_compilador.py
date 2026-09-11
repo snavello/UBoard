@@ -69,6 +69,31 @@ def test_kpis_de_varias_entidades_y_cociente_en_una_consulta(conexion, modelo):
     assert tipos == {"total_ventas": "decimal", "cantidad_ventas": "entero", "ticket_promedio": "decimal", "total_pagado": "decimal", "cantidad_pagos": "entero"}
 
 
+def test_formula_entre_metricas_de_dos_entidades_y_anidada(conexion):
+    contenido = copy.deepcopy(MODELO_JSON)
+    contenido["metricas"].append({"id": "margen", "nombre": "Margen", "expresion": {"operacion": "resta", "izquierda": "total_ventas", "derecha": "total_pagado"}})
+    contenido["metricas"].append({"id": "margen_ajustado", "nombre": "Margen ajustado", "expresion": {"operacion": "suma", "izquierda": "margen", "derecha": 100.0}})
+    modelo_formula = modelo_efectivo(parsear_modelo(contenido))
+    resultado = _correr(conexion, modelo_formula, {"metricas": ["margen", "margen_ajustado"]})
+    total = _sql(conexion, "SELECT sum(importe) FROM ventas")[0][0]
+    pagado = _sql(conexion, "SELECT sum(monto) FROM pagos")[0][0]
+    fila = dict(zip([c.nombre for c in resultado.columnas], resultado.filas[0]))
+    assert _cerca(fila["margen"], total - pagado)
+    assert _cerca(fila["margen_ajustado"], total - pagado + 100)
+    assert {c.nombre: c.tipo for c in resultado.columnas} == {"margen": "decimal", "margen_ajustado": "decimal"}
+
+
+def test_formula_de_division_usa_nullif(conexion):
+    contenido = copy.deepcopy(MODELO_JSON)
+    contenido["metricas"].append({"id": "por_unidad", "nombre": "Por unidad", "expresion": {"operacion": "division", "izquierda": "total_ventas", "derecha": "unidades_vendidas"}})
+    contenido["metricas"].append({"id": "division_por_cero", "nombre": "Cero", "expresion": {"operacion": "division", "izquierda": "total_ventas", "derecha": 0.0}})
+    modelo_formula = modelo_efectivo(parsear_modelo(contenido))
+    resultado = _correr(conexion, modelo_formula, {"metricas": ["total_ventas", "unidades_vendidas", "por_unidad", "division_por_cero"]})
+    fila = dict(zip([c.nombre for c in resultado.columnas], resultado.filas[0]))
+    assert _cerca(fila["por_unidad"], fila["total_ventas"] / fila["unidades_vendidas"])
+    assert fila["division_por_cero"] is None
+
+
 def test_conteo_distinto_y_promedio(conexion, modelo):
     resultado = _correr(conexion, modelo, {"metricas": ["vendedores_activos", "cuotas_promedio"]})
     distintos, promedio = _sql(conexion, "SELECT count(DISTINCT v.vendedor), (SELECT avg(cuotas) FROM pagos) FROM ventas v")[0]

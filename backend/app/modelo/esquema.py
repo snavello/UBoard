@@ -105,17 +105,33 @@ class ExpresionAgregacion(_Base):
 
 
 class ExpresionCociente(_Base):
-    """numerador / denominador, ambos ids de metricas de agregacion.
-    (Expresiones aritmeticas libres: pendiente, las quiere Sd mas adelante.)"""
+    """numerador / denominador, ambos ids de metricas de agregacion."""
 
     numerador: IdCorto
     denominador: IdCorto
 
 
+OperacionFormula = Literal["suma", "resta", "multiplicacion", "division"]
+
+
+class ExpresionFormula(_Base):
+    """Arbol de operaciones aritmeticas entre metricas (de agregacion u otras
+    formulas, anidando) y constantes numericas. Cada operando es un id de
+    metrica, un numero o, para anidar, otra ExpresionFormula embebida."""
+
+    operacion: OperacionFormula
+    izquierda: "Operando"
+    derecha: "Operando"
+
+
+Operando = IdCorto | float | ExpresionFormula
+ExpresionFormula.model_rebuild()
+
+
 class Metrica(_Base):
     id: IdCorto
     nombre: str = Field(min_length=1)
-    expresion: ExpresionAgregacion | ExpresionCociente
+    expresion: ExpresionAgregacion | ExpresionCociente | ExpresionFormula
     formato: Formato = "decimal"
     confianza: float = Field(default=1.0, ge=0.0, le=1.0)
     origen: Origen = "usuario"

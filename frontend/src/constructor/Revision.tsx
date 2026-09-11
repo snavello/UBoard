@@ -15,19 +15,20 @@ import type {
   Agregacion,
   Campo,
   EntidadModelo,
-  ExpresionAgregacion,
-  ExpresionCociente,
+  ExpresionMetrica,
   Formato,
   Granularidad,
   MetricaModelo,
   ModeloSemantico,
+  Operando,
+  OperacionFormula,
   RelacionModelo,
   Tarea,
   TipoEntidad,
   TipoSemantico,
   VersionCompleta,
 } from "../tipos";
-import { esExpresionAgregacion } from "../tipos";
+import { esExpresionAgregacion, esExpresionCociente } from "../tipos";
 import estilos from "./Revision.module.css";
 
 const GRANULARIDADES: Granularidad[] = ["dia", "semana", "mes", "trimestre", "anio"];
@@ -85,10 +86,18 @@ function describirEvidenciaRelacion(relacion: RelacionModelo): string {
   return partes.join(", ");
 }
 
+const SIMBOLO_OPERACION_FORMULA: Record<OperacionFormula, string> = { suma: "+", resta: "−", multiplicacion: "×", division: "÷" };
+
+function resumenOperando(operando: Operando): string {
+  if (typeof operando === "number") return formatearNumero(operando, 2);
+  if (typeof operando === "string") return operando;
+  return `(${resumenOperando(operando.izquierda)} ${SIMBOLO_OPERACION_FORMULA[operando.operacion]} ${resumenOperando(operando.derecha)})`;
+}
+
 function resumenExpresion(metrica: MetricaModelo): string {
-  return esExpresionAgregacion(metrica.expresion)
-    ? `${metrica.expresion.agregacion}(${metrica.expresion.campo})`
-    : `${metrica.expresion.numerador} / ${metrica.expresion.denominador}`;
+  if (esExpresionAgregacion(metrica.expresion)) return `${metrica.expresion.agregacion}(${metrica.expresion.campo})`;
+  if (esExpresionCociente(metrica.expresion)) return `${metrica.expresion.numerador} / ${metrica.expresion.denominador}`;
+  return `${resumenOperando(metrica.expresion.izquierda)} ${SIMBOLO_OPERACION_FORMULA[metrica.expresion.operacion]} ${resumenOperando(metrica.expresion.derecha)}`;
 }
 
 function todosLosCampos(modelo: ModeloSemantico): { referencia: string; etiqueta: string; tipoDato: string }[] {
@@ -493,17 +502,33 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
   const hayPropuestas = modelo.metricas.some((metrica) => metrica.estado === "propuesta");
   const [id, setId] = useState("");
   const [nombre, setNombre] = useState("");
-  const [tipo, setTipo] = useState<"agregacion" | "cociente">("agregacion");
+  const [tipo, setTipo] = useState<"agregacion" | "cociente" | "formula">("agregacion");
   const [agregacion, setAgregacion] = useState<Agregacion>("suma");
   const [campo, setCampo] = useState("");
   const [numerador, setNumerador] = useState("");
   const [denominador, setDenominador] = useState("");
+  const [operacionFormula, setOperacionFormula] = useState<OperacionFormula>("resta");
+  const [izqTipo, setIzqTipo] = useState<"metrica" | "numero">("metrica");
+  const [izqMetrica, setIzqMetrica] = useState("");
+  const [izqNumero, setIzqNumero] = useState("");
+  const [derTipo, setDerTipo] = useState<"metrica" | "numero">("metrica");
+  const [derMetrica, setDerMetrica] = useState("");
+  const [derNumero, setDerNumero] = useState("");
   const [formato, setFormato] = useState<Formato>("decimal");
 
   const crear = (e: React.FormEvent) => {
     e.preventDefault();
     if (!id.trim() || !nombre.trim()) return;
-    const expresion: ExpresionAgregacion | ExpresionCociente = tipo === "agregacion" ? { agregacion, campo } : { numerador, denominador };
+    let expresion: ExpresionMetrica;
+    if (tipo === "agregacion") {
+      expresion = { agregacion, campo };
+    } else if (tipo === "cociente") {
+      expresion = { numerador, denominador };
+    } else {
+      const izquierda: Operando = izqTipo === "metrica" ? izqMetrica : Number(izqNumero);
+      const derecha: Operando = derTipo === "metrica" ? derMetrica : Number(derNumero);
+      expresion = { operacion: operacionFormula, izquierda, derecha };
+    }
     void aplicar({ operacion: "crear_metrica", id: id.trim(), nombre: nombre.trim(), expresion, formato }).then(() => {
       setId("");
       setNombre("");
@@ -575,9 +600,10 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
         <form className={estilos.formCrear} onSubmit={crear}>
           <input className="campo" placeholder="id (ej. total_descuentos)" value={id} onChange={(e) => setId(e.target.value)} required />
           <input className="campo" placeholder="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
-          <select className="campo" value={tipo} onChange={(e) => setTipo(e.target.value as "agregacion" | "cociente")}>
+          <select className="campo" value={tipo} onChange={(e) => setTipo(e.target.value as "agregacion" | "cociente" | "formula")}>
             <option value="agregacion">Agregación</option>
             <option value="cociente">Cociente</option>
+            <option value="formula">Fórmula (+ − × ÷)</option>
           </select>
           {tipo === "agregacion" ? (
             <>
@@ -597,7 +623,7 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
                 ))}
               </select>
             </>
-          ) : (
+          ) : tipo === "cociente" ? (
             <>
               <select className="campo" value={numerador} onChange={(e) => setNumerador(e.target.value)} required>
                 <option value="">Numerador…</option>
@@ -616,6 +642,35 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
                 ))}
               </select>
             </>
+          ) : (
+            <>
+              <CampoOperando
+                etiqueta="Operando izquierdo"
+                tipo={izqTipo}
+                onTipo={setIzqTipo}
+                metricaId={izqMetrica}
+                onMetricaId={setIzqMetrica}
+                numero={izqNumero}
+                onNumero={setIzqNumero}
+                metricas={modelo.metricas}
+              />
+              <select className="campo" value={operacionFormula} onChange={(e) => setOperacionFormula(e.target.value as OperacionFormula)}>
+                <option value="suma">+ suma</option>
+                <option value="resta">− resta</option>
+                <option value="multiplicacion">× multiplicación</option>
+                <option value="division">÷ división</option>
+              </select>
+              <CampoOperando
+                etiqueta="Operando derecho"
+                tipo={derTipo}
+                onTipo={setDerTipo}
+                metricaId={derMetrica}
+                onMetricaId={setDerMetrica}
+                numero={derNumero}
+                onNumero={setDerNumero}
+                metricas={modelo.metricas}
+              />
+            </>
           )}
           <select className="campo" value={formato} onChange={(e) => setFormato(e.target.value as Formato)}>
             {FORMATOS.map((f) => (
@@ -628,8 +683,50 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
             Crear
           </button>
         </form>
+        {tipo === "formula" && <p className="mudo">Para anidar, primero creá la fórmula interna como métrica y después usala como operando de otra.</p>}
       </details>
     </section>
+  );
+}
+
+function CampoOperando({
+  etiqueta,
+  tipo,
+  onTipo,
+  metricaId,
+  onMetricaId,
+  numero,
+  onNumero,
+  metricas,
+}: {
+  etiqueta: string;
+  tipo: "metrica" | "numero";
+  onTipo: (tipo: "metrica" | "numero") => void;
+  metricaId: string;
+  onMetricaId: (id: string) => void;
+  numero: string;
+  onNumero: (numero: string) => void;
+  metricas: MetricaModelo[];
+}) {
+  return (
+    <span className={estilos.operando}>
+      <select className="campo" value={tipo} onChange={(e) => onTipo(e.target.value as "metrica" | "numero")}>
+        <option value="metrica">Métrica</option>
+        <option value="numero">Número</option>
+      </select>
+      {tipo === "metrica" ? (
+        <select className="campo" value={metricaId} onChange={(e) => onMetricaId(e.target.value)} required>
+          <option value="">{etiqueta}…</option>
+          {metricas.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nombre}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input className="campo" type="number" step="any" placeholder={etiqueta} value={numero} onChange={(e) => onNumero(e.target.value)} required />
+      )}
+    </span>
   );
 }
 
