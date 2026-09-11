@@ -57,6 +57,33 @@ def test_cargar_leer_y_versionar(cliente, datos, ingresar, cargar_datos_prueba, 
     assert inexistente.json()["codigo"] == "E-MOD-03"
 
 
+def test_restaurar_version(cliente, datos, ingresar, cargar_datos_prueba, modelo_prueba):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+    ruta = _ruta(workspace_id)
+
+    cliente.put(ruta, json=modelo_prueba)  # version 1
+    cambiado = copy.deepcopy(modelo_prueba)
+    cambiado["metricas"] = [m for m in cambiado["metricas"] if m["id"] != "cuotas_promedio"]
+    cliente.put(ruta, json=cambiado)  # version 2, sin cuotas_promedio
+
+    respuesta = cliente.post(f"{ruta}/versiones/1/restaurar")
+    assert respuesta.status_code == 201, respuesta.text
+    version_3 = respuesta.json()
+    assert version_3["numero"] == 3 and version_3["operacion"] == "restaurar"
+    assert version_3["resumen"] == "Se restauró la versión 1"
+    assert any(m["id"] == "cuotas_promedio" for m in version_3["contenido"]["metricas"])
+    assert version_3["diff"]["metricas"]["agregados"] == ["cuotas_promedio"]
+    assert cliente.get(ruta).json()["numero"] == 3
+
+    inexistente = cliente.post(f"{ruta}/versiones/99/restaurar")
+    assert inexistente.status_code == 404 and inexistente.json()["codigo"] == "E-MOD-03"
+
+    ingresar("visualizador@acme.test")
+    assert cliente.post(f"{ruta}/versiones/1/restaurar").status_code == 403
+
+
 def test_un_modelo_invalido_no_crea_version(cliente, datos, ingresar, cargar_datos_prueba, modelo_prueba):
     ingresar("constructor@acme.test")
     workspace_id = datos.acme_workspace_id

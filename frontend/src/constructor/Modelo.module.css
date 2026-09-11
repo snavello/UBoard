@@ -10,6 +10,9 @@
   background: transparent; text-align: left; cursor: pointer; font-size: 13px;
 }
 .version:hover { background: var(--superficie-2); border-color: var(--linea); }
+.versionItem { display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid var(--linea); padding-bottom: 6px; }
+.versionItem:last-child { border-bottom: none; padding-bottom: 0; }
+.diffLinea { color: var(--tinta-2); font-size: 12px; font-family: var(--fuente-mono); }
 @media (max-width: 900px) {
   .editor { grid-template-columns: 1fr; }
   .columnaVersiones { border-left: none; padding-left: 0; }

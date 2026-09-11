@@ -39,6 +39,7 @@ class VersionSpecResumen(BaseModel):
     resumen: str | None
     autor_id: int | None
     creada_en: datetime
+    diff: dict[str, Any] | None
 
 
 class DashboardSalida(VersionSpecResumen):
@@ -136,6 +137,7 @@ def _resumen(version: VersionSpec) -> VersionSpecResumen:
         resumen=version.resumen,
         autor_id=version.autor_id,
         creada_en=version.creada_en,
+        diff=version.diff,
     )
 
 
@@ -224,6 +226,18 @@ def listar_versiones(workspace: Workspace = Depends(workspace_del_usuario), sesi
 @router.get("/versiones/{numero}", response_model=DashboardSalida)
 def obtener_version(numero: int, workspace: Workspace = Depends(workspace_del_usuario), sesion: Session = Depends(obtener_sesion)) -> DashboardSalida:
     return _salida(sesion, workspace, operaciones.obtener_version(sesion, workspace, numero))
+
+
+@router.post("/versiones/{numero}/restaurar", response_model=DashboardSalida, status_code=status.HTTP_201_CREATED)
+def restaurar_version(
+    numero: int,
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+) -> DashboardSalida:
+    """Deshacer (paso 17), espejo del de modelo: guarda el contenido de la
+    versión `numero` como una versión nueva. E-SPEC-03 si no existe."""
+    return _salida(sesion, workspace, operaciones.restaurar(sesion, workspace, numero, usuario))
 
 
 # ---------- Paneles ----------

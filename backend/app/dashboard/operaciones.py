@@ -14,6 +14,7 @@ from app.modelo.validacion import modelo_efectivo
 from app.nucleo.errores import ErrorApp
 
 OPERACION_CARGAR_JSON = "cargar_json"
+OPERACION_RESTAURAR = "restaurar"
 
 
 def modelo_efectivo_actual(sesion: Session, workspace: Workspace) -> tuple[ModeloSemantico, int]:
@@ -80,6 +81,24 @@ def aplicar_y_guardar(sesion: Session, workspace: Workspace, contenido_operacion
     )
 
 
+def restaurar(sesion: Session, workspace: Workspace, numero: int, usuario: Usuario | None) -> VersionSpec:
+    """Deshacer (fase 3, paso 17): mismo mecanismo que en el modelo. Se
+    revalida contra el modelo efectivo actual, por si cambió desde
+    entonces (un panel que dependía de una métrica ya rechazada no vuelve
+    a colarse en silencio)."""
+    vieja = obtener_version(sesion, workspace, numero)
+    spec, numero_modelo = validar_contenido(sesion, workspace, vieja.contenido)
+    return guardar_version(
+        sesion,
+        workspace,
+        spec,
+        numero_modelo,
+        operacion=OPERACION_RESTAURAR,
+        autor_id=usuario.id if usuario else None,
+        resumen=f"Se restauró la versión {numero}",
+    )
+
+
 def guardar_version(
     sesion: Session,
     workspace: Workspace,
@@ -90,8 +109,10 @@ def guardar_version(
     autor_id: int | None,
     resumen: str | None = None,
 ) -> VersionSpec:
-    """Nueva fila en version_spec con el spec YA validado. La comparten la
-    carga de JSON y la propuesta inicial del paso 14."""
+    """Nueva fila en version_spec con el spec YA validado, el numero
+    siguiente y el diff contra la version anterior. La comparten la carga de
+    JSON, la propuesta inicial (paso 14), las operaciones (paso 16) y
+    restaurar (paso 17)."""
     anterior = version_actual(sesion, workspace)
     numero = (anterior.numero if anterior else 0) + 1
     spec = spec.model_copy(update={"version": numero, "modelo_version": numero_modelo})
@@ -101,6 +122,7 @@ def guardar_version(
         modelo_version=numero_modelo,
         contenido=spec.model_dump(mode="json"),
         operacion=operacion,
+        diff=calcular_diff(spec_de(anterior), spec) if anterior else None,
         resumen=(resumen or spec.resumen())[:300],
         autor_id=autor_id,
     )
@@ -108,3 +130,29 @@ def guardar_version(
     sesion.commit()
     sesion.refresh(version)
     return version
+
+
+def calcular_diff(anterior: SpecDashboard, nuevo: SpecDashboard) -> dict[str, Any]:
+    """Que ids aparecieron, desaparecieron o cambiaron en cada coleccion del
+    spec; mismo formato que `modelo/operaciones.calcular_diff`."""
+    diff: dict[str, Any] = {}
+    colecciones = {
+        "filtros": ({f.id: f for f in anterior.filtros}, {f.id: f for f in nuevo.filtros}),
+        "kpis": ({k.id: k for k in anterior.kpis}, {k.id: k for k in nuevo.kpis}),
+        "graficos": ({g.id: g for g in anterior.graficos}, {g.id: g for g in nuevo.graficos}),
+        "pestanias": (
+            {p.entidad: p for p in anterior.explorador.pestanias},
+            {p.entidad: p for p in nuevo.explorador.pestanias},
+        ),
+    }
+    for nombre, (mapa_viejo, mapa_nuevo) in colecciones.items():
+        diff[nombre] = {
+            "agregados": sorted(set(mapa_nuevo) - set(mapa_viejo)),
+            "quitados": sorted(set(mapa_viejo) - set(mapa_nuevo)),
+            "cambiados": sorted(
+                identificador for identificador in set(mapa_viejo) & set(mapa_nuevo) if mapa_viejo[identificador] != mapa_nuevo[identificador]
+            ),
+        }
+    if anterior.titulo != nuevo.titulo:
+        diff["titulo"] = {"anterior": anterior.titulo, "nuevo": nuevo.titulo}
+    return diff

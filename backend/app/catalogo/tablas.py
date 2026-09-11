@@ -248,6 +248,9 @@ class VersionSpec(Base):
     modelo_version: Mapped[int] = mapped_column(Integer)
     contenido: Mapped[dict[str, Any]] = mapped_column(JSONB)
     operacion: Mapped[str] = mapped_column(String(60))
+    # Espejo de VersionModelo.diff (paso 17): ids agregados/quitados/cambiados
+    # por coleccion (filtros, kpis, graficos, pestanias); None en la primera version.
+    diff: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     resumen: Mapped[str | None] = mapped_column(String(300), nullable=True)
     autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True)
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

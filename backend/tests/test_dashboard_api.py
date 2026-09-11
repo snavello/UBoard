@@ -338,3 +338,22 @@ def test_operaciones_exigen_constructor(cliente, dashboard, datos, ingresar):
     assert cliente.post(_ruta(dashboard, "/operaciones"), json={"operacion": "editar_titulo", "titulo": "x"}).status_code == 403
     ingresar("constructor@beta.test")
     assert cliente.post(_ruta(dashboard, "/operaciones"), json={"operacion": "editar_titulo", "titulo": "x"}).status_code == 404
+
+
+def test_restaurar_version(cliente, dashboard, spec_prueba):
+    ruta = _ruta(dashboard)
+    otro = copy.deepcopy(spec_prueba)
+    otro["graficos"] = otro["graficos"][:2]
+    cliente.put(ruta, json=otro)  # version 2, con 2 graficos
+
+    respuesta = cliente.post(f"{ruta}/versiones/1/restaurar")
+    assert respuesta.status_code == 201, respuesta.text
+    version_3 = respuesta.json()
+    assert version_3["numero"] == 3 and version_3["operacion"] == "restaurar"
+    assert version_3["resumen"] == "Se restauró la versión 1"
+    assert len(version_3["contenido"]["graficos"]) == 4
+    assert version_3["diff"]["graficos"]["agregados"] == sorted({g["id"] for g in spec_prueba["graficos"]} - {g["id"] for g in otro["graficos"]})
+    assert cliente.get(ruta).json()["numero"] == 3
+
+    inexistente = cliente.post(f"{ruta}/versiones/99/restaurar")
+    assert inexistente.status_code == 404 and inexistente.json()["codigo"] == "E-SPEC-03"

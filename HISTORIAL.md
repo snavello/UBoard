@@ -651,3 +651,38 @@ llamada a `crear_grafico`.
 un gráfico con una dimensión que multiplicaría filas: la operación se
 aplica igual, pero `validar_spec` la rechaza) y 2 de API. Suite completa:
 306 tests backend en verde por archivo.
+
+## 2026-09-11 — Fase 3, paso 17: historial y deshacer (v0.17.01)
+
+Un solo mecanismo para las dos cosas, como se acordó en la duda 5 del plan
+de la fase 3: `restaurar(numero)` vuelve a guardar el contenido de una
+versión vieja como versión nueva, sin reescribir el historial. "Deshacer el
+último cambio" es simplemente restaurar la versión anterior a la actual.
+El mecanismo ya existía en germen desde el paso 12 (un comentario en
+`modelo/operaciones.py` decía "el deshacer usa el contenido completo de la
+version anterior, no este diff") — este paso lo hizo realidad.
+
+Antes de guardar, `restaurar` corre la validación completa de siempre
+contra el estado actual (fuentes del workspace, modelo efectivo), no
+contra el de cuando se creó esa versión vieja: si algo cambió de forma
+incompatible desde entonces, restaurar falla igual que cualquier otra
+operación, no vuelve a colar algo roto en silencio.
+
+`version_spec` no tenía columna `diff` (solo `version_modelo` la tenía
+desde la fase 1); se agregó (`d5e2444fad05`) junto con
+`dashboard/operaciones.calcular_diff`, espejo exacto del de modelo. En el
+frontend, la lista de versiones que ya existía en "Avanzado" desde el paso
+7 ahora muestra el diff en una línea legible por colección
+(`compartido/diff.ts`) y un botón "Restaurar esta versión" en todas menos
+la actual.
+
+Probado en Docker (reconstruido sin problemas esta vez) contra el modelo
+real de la demo, con ocho versiones de historial acumuladas: restaurar la
+versión 1 volvió el modelo a su estado más viejo (creó la versión 9);
+restaurar la versión 8 lo devolvió a como estaba antes de la prueba (creó
+la versión 10, con el mismo contenido que la 8). La demo quedó exactamente
+como estaba; el número de versión avanzó, que es el comportamiento
+esperado — nunca se pisa el historial.
+
+309 tests backend en verde por archivo, build y vitest del frontend sin
+cambios.

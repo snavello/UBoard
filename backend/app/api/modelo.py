@@ -142,3 +142,17 @@ def obtener_version(
     numero: int, workspace: Workspace = Depends(workspace_del_usuario), sesion: Session = Depends(obtener_sesion)
 ) -> VersionSalida:
     return _salida(operaciones.obtener_version(sesion, workspace, numero))
+
+
+@router.post("/versiones/{numero}/restaurar", response_model=VersionSalida, status_code=status.HTTP_201_CREATED)
+def restaurar_version(
+    numero: int,
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+) -> VersionSalida:
+    """Deshacer (paso 17): vuelve a guardar el contenido de la versión
+    `numero` como una versión nueva. "Deshacer el último cambio" es
+    restaurar la versión anterior a la actual; se puede restaurar
+    cualquier otra para volver más atrás. E-MOD-03 si no existe."""
+    return _salida(operaciones.restaurar(sesion, workspace, numero, usuario))

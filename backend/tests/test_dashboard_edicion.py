@@ -134,3 +134,22 @@ def test_pestanias(spec, modelo):
         aplicar(spec, operacion="crear_pestania", entidad="pagos", columnas=["monto"])  # ya existe
     with pytest.raises(ErrorApp):
         aplicar(spec, operacion="editar_pestania", entidad="no_existe", titulo="x")
+
+
+def test_calcular_diff(spec):
+    from app.dashboard.operaciones import calcular_diff
+
+    editado, _ = aplicar(spec, operacion="editar_titulo", titulo="Otro título")
+    editado, _ = aplicar(editado, operacion="eliminar_kpi", kpi=spec.kpis[0].id)
+    editado, _ = aplicar(editado, operacion="crear_filtro", campo="productos.activo", tipo="lista")
+
+    diff = calcular_diff(spec, editado)
+    assert diff["titulo"] == {"anterior": spec.titulo, "nuevo": "Otro título"}
+    assert diff["kpis"]["quitados"] == [spec.kpis[0].id]
+    assert diff["filtros"]["agregados"] == ["f_productos_activo"]
+    assert diff["graficos"] == {"agregados": [], "quitados": [], "cambiados": []}
+    assert diff["pestanias"] == {"agregados": [], "quitados": [], "cambiados": []}
+
+    igual = calcular_diff(spec, spec)
+    assert all(coleccion == {"agregados": [], "quitados": [], "cambiados": []} for nombre, coleccion in igual.items() if nombre != "titulo")
+    assert "titulo" not in igual

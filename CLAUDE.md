@@ -328,7 +328,22 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     aplicable). Es la pieza que le va a faltar al chat constructor (paso
     20) para poder "agregar un gráfico" sin tocar el JSON. 6 tests puros +
     2 de API (306 en total).
-  - Pasos 17 a 22: pendientes.
+  - Paso 17 (historial y deshacer): HECHO 2026-09-11 (v0.17.01).
+    `restaurar(sesion, workspace, numero, usuario)` en `modelo/operaciones.py`
+    y su espejo en `dashboard/operaciones.py`: vuelve a guardar el contenido
+    de una versión vieja como versión nueva (nunca se reescribe el
+    historial), revalidando por si las fuentes o el modelo cambiaron desde
+    entonces. `POST /modelo/versiones/{numero}/restaurar` y `POST
+    /dashboard/versiones/{numero}/restaurar`. `version_spec` gana columna
+    `diff` (migración `d5e2444fad05`) y `dashboard/operaciones.calcular_diff`,
+    espejo del de modelo, para que el spec tenga el mismo historial legible.
+    Frontend: la lista de versiones de "Avanzado" (modelo y dashboard)
+    ahora muestra el diff en una línea por colección (`compartido/diff.ts`)
+    y un botón "Restaurar esta versión" en todas menos la actual. Probado
+    en Docker contra la demo real: restaurar y volver a restaurar,
+    contenido correcto en ambos sentidos; la demo quedó como estaba. 3
+    tests nuevos (309 en total).
+  - Pasos 18 a 22: pendientes.
 - Fase 4: no empezada.
 
 ## Accesos de la demo local
@@ -491,6 +506,32 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   repetido es `E-SPEC-08`. Esta capa NO valida contra el modelo (eso lo
   hace `validar_spec` al guardar, y ahí un panel que multiplica filas es
   `E-SPEC-01`, no un error de esta capa).
+
+## Reglas de historial y deshacer (vigentes desde el paso 17)
+- Un solo mecanismo para las dos cosas: `restaurar(numero)` vuelve a
+  guardar el CONTENIDO de una versión vieja como versión nueva de mayor
+  número. El historial nunca se reescribe ni se borra; "deshacer el último
+  cambio" es restaurar la versión anterior a la actual, y restaurar
+  cualquier otra sirve para volver más atrás sin un botón "rehacer"
+  aparte (rehacer = restaurar la que tenías antes de deshacer).
+- Antes de guardar, `restaurar` vuelve a correr la validación completa
+  (`validar_modelo` / `validar_contenido`) contra el estado ACTUAL de
+  fuentes o modelo efectivo, no contra el de cuando se creó esa versión
+  vieja: si algo cambió de forma incompatible desde entonces, restaurar
+  falla igual que cualquier otra operación (`E-MOD-01` / `E-SPEC-01`), no
+  se cuela en silencio.
+- `version_spec` tiene `diff` desde este paso (antes solo `version_modelo`
+  lo tenía); `dashboard/operaciones.calcular_diff` es un espejo exacto del
+  de modelo, comparando filtros/kpis/graficos por id y pestañas por
+  entidad, más un caso especial para el título (`{"anterior", "nuevo"}` en
+  vez de agregados/quitados/cambiados).
+- Solo el constructor puede restaurar (mismo rol que edita); el
+  visualizador no ve el historial en absoluto.
+- Frontend: `compartido/diff.ts` (`resumirDiff`) convierte el diff crudo en
+  líneas de texto (`"metricas: +total_pagado · ~ticket_promedio"`); vive en
+  la lista de versiones que ya existía en "Avanzado" (paso 7), ahora con un
+  botón "Restaurar esta versión" en todas menos la primera de la lista
+  (que es la actual).
 
 ## Reglas de Claude en la inferencia (vigentes desde el paso 11)
 - **Claude solo opina sobre lo semántico**: nombres de entidades y campos,

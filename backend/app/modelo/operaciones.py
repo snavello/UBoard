@@ -15,6 +15,7 @@ from app.modelo.validacion import exigir_valido, parsear_modelo, validar_contra_
 from app.nucleo.errores import ErrorApp
 
 OPERACION_CARGAR_JSON = "cargar_json"
+OPERACION_RESTAURAR = "restaurar"
 
 
 def esquemas_del_workspace(sesion: Session, workspace: Workspace) -> dict[str, list[dict[str, Any]]]:
@@ -84,6 +85,24 @@ def aplicar_y_guardar(sesion: Session, workspace: Workspace, contenido_operacion
     exigir_valido(errores)
     return guardar_version(
         sesion, workspace, modelo, operacion=operacion.operacion, autor_id=usuario.id if usuario else None, resumen=resumen
+    )
+
+
+def restaurar(sesion: Session, workspace: Workspace, numero: int, usuario: Usuario | None) -> VersionModelo:
+    """Deshacer (fase 3, paso 17): vuelve a guardar el contenido de una
+    version vieja como version nueva (nunca se reescribe el historial).
+    "Deshacer" es restaurar la version anterior a la actual; restaurar
+    cualquier otra tambien sirve para volver mas atras. Se revalida contra
+    las fuentes actuales por si cambiaron desde entonces."""
+    vieja = obtener_version(sesion, workspace, numero)
+    modelo = validar_modelo(sesion, workspace, vieja.contenido)
+    return guardar_version(
+        sesion,
+        workspace,
+        modelo,
+        operacion=OPERACION_RESTAURAR,
+        autor_id=usuario.id if usuario else None,
+        resumen=f"Se restauró la versión {numero}",
     )
 
 

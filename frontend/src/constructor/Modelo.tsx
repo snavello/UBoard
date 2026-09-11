@@ -10,6 +10,7 @@ import { Aviso, AvisoError, ListaErrores } from "../compartido/componentes/Aviso
 import { Cargando } from "../compartido/componentes/Cargando";
 import { Marco } from "../compartido/componentes/Marco";
 import { Pestanias } from "../compartido/componentes/Pestanias";
+import { resumirDiff } from "../compartido/diff";
 import { formatearFecha } from "../compartido/formato";
 import { useSesion } from "../compartido/sesion";
 import { Revision } from "./Revision";
@@ -109,6 +110,18 @@ function EditorJson({ artefacto, workspaceId }: { artefacto: "modelo" | "dashboa
     setValidacion(null);
   };
 
+  const restaurar = useMutation({
+    mutationFn: (numero: number) => pedir<VersionCompleta>(`${ruta}/versiones/${numero}/restaurar`, { method: "POST" }),
+    onSuccess: (version, numeroRestaurado) => {
+      setTexto(JSON.stringify(version.contenido, null, 2));
+      setTocado(false);
+      setValidacion({ valido: true, errores: [], resumen: `Versión ${version.numero} guardada: se restauró la ${numeroRestaurado}.` });
+      void clienteConsultas.invalidateQueries({ queryKey: [artefacto, workspaceId] });
+      void clienteConsultas.invalidateQueries({ queryKey: [artefacto, workspaceId, "versiones"] });
+      void clienteConsultas.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
+    },
+  });
+
   const cargarArchivo = async (archivo: File | undefined) => {
     if (!archivo) return;
     setTexto(await archivo.text());
@@ -177,14 +190,31 @@ function EditorJson({ artefacto, workspaceId }: { artefacto: "modelo" | "dashboa
       <aside className={estilos.columnaVersiones}>
         <h3>Versiones</h3>
         {versiones.data && versiones.data.length === 0 && <span className="mudo">Ninguna todavía.</span>}
+        {restaurar.isError && <AvisoError error={restaurar.error} titulo="No se pudo restaurar" />}
         <ul className={estilos.versiones}>
-          {versiones.data?.map((version) => (
-            <li key={version.numero}>
+          {versiones.data?.map((version, indice) => (
+            <li key={version.numero} className={estilos.versionItem}>
               <button type="button" className={estilos.version} onClick={() => void cargarVersion(version.numero)}>
                 <strong>v{version.numero}</strong>
                 <span className="mudo">{formatearFecha(version.creada_en)}</span>
                 <span className="secundario">{version.resumen}</span>
+                {resumirDiff(version.diff).map((linea) => (
+                  <span key={linea} className={estilos.diffLinea}>
+                    {linea}
+                  </span>
+                ))}
               </button>
+              {indice > 0 && (
+                <button
+                  type="button"
+                  className="boton boton--chico boton--texto"
+                  disabled={restaurar.isPending}
+                  onClick={() => restaurar.mutate(version.numero)}
+                  title={`Volver a esta versión (queda como versión ${(versiones.data?.[0]?.numero ?? version.numero) + 1} nueva)`}
+                >
+                  {restaurar.isPending && restaurar.variables === version.numero ? "Restaurando…" : "Restaurar esta versión"}
+                </button>
+              )}
             </li>
           ))}
         </ul>
