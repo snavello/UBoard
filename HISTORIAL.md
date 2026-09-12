@@ -1059,3 +1059,54 @@ referencia (`PruebaAceptacionFase3`) se borró al terminar; la demo no se
 tocó en ningún momento de la fase.
 
 **Fase 3 queda lista para que Sd la acepte.**
+
+## 2026-09-12 — Dictado por voz en el cuadro de preguntas (v0.22.01)
+
+Pedido de Sd que llegó en medio de la sesión de aceptación de la fase 3,
+mientras se armaba `docs/fase3-aceptacion.md`: quería que el cuadro de
+preguntas del Tablero también aceptara voz, y mencionó que ya lo había
+hecho para un bot del panel de sindicato de otro proyecto suyo (Mi
+Trabajo). No estaba en el plan aprobado de la fase 3; se avisó eso mismo y
+se preguntó cómo seguir antes de tocar código. Sd contestó "agregá voz
+ahora", así que se encaró en el momento como un agregado chico, sin la
+ceremonia completa de lectura/dudas/plan que llevan las fases nuevas (es
+una funcionalidad acotada sobre una pantalla que ya existía, no una fase).
+
+La solución más simple y la única que no necesita nada nuevo del backend
+ni un servicio pago: la Web Speech API del navegador
+(`SpeechRecognition`, con el prefijo `webkit` para Chrome/Edge). Vive en
+`asistente/vozWeb.ts`, un módulo chico que declara a mano los tipos que
+hacen falta (TypeScript no trae tipos oficiales para esta API) y expone
+`obtenerConstructorDeVoz()` (devuelve `null` si el navegador no la tiene:
+en Firefox y Safari en iOS el botón de micrófono directamente no
+aparece, en vez de mostrar un botón roto) y `transcriptoDe(evento)` para
+juntar los resultados parciales en un solo texto.
+
+`Chat.tsx` (pasos 20 y 21) ganó un botón de micrófono entre el campo de
+texto y "Enviar"/"Preguntar", en las dos variantes (el cuadro del Tablero
+y el panel flotante del constructor, porque las dos comparten el mismo
+componente desde el paso 21). Al tocarlo arranca a escuchar en `es-AR`
+con `interimResults` (el texto va apareciendo mientras la persona habla,
+no hay que esperar a que termine de hablar para ver algo) y llena el
+campo; el botón cambia de color y parpadea mientras escucha. Importante:
+**no envía el mensaje solo por dictarlo** — la persona ve el texto
+transcripto en el campo, lo puede corregir si escuchó mal algo, y lo
+manda a mano como si lo hubiera tipeado. Evita que un error de
+reconocimiento de voz mande una pregunta rota al asistente sin que nadie
+lo revise.
+
+Verificado en el navegador embebido de la sesión (que sí expone la API):
+el botón aparece correctamente en las dos variantes de `Chat`, y al
+tocarlo dispara de verdad el pedido de permiso de micrófono del navegador
+— el entorno de pruebas lo bloquea por política de sandbox (no hay
+micrófono real disponible ahí), pero eso mismo confirma que el código
+llega hasta el punto correcto; cuando el permiso se niega, el botón
+vuelve solo a su estado normal sin romper nada (`onerror`/`onend`
+manejados). Queda pendiente una prueba con una persona hablando de
+verdad frente a un micrófono real, que necesita un navegador de
+escritorio normal en vez del embebido de esta sesión.
+
+Build de Vite y los 7 tests de vitest sin cambios (frontend puro, sin
+tests nuevos — se verifica en el navegador como el resto del frontend
+desde el paso 6); la suite de backend no se tocó (no hay cambios de
+backend en este agregado).

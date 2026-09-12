@@ -40,3 +40,17 @@
 .inline .mensajes { flex: none; max-height: 220px; padding: 10px 12px; }
 .inline .formulario { padding: 10px; }
 
+/* Dictado por voz: boton redondo entre el campo y "Enviar"/"Preguntar". */
+.botonMic {
+  flex-shrink: 0; width: 36px; height: 36px; padding: 0;
+  border: 1px solid var(--linea); border-radius: var(--radio-pastilla);
+  background: var(--superficie); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.botonMic:hover { background: var(--superficie-2); }
+.botonMic.escuchando { background: var(--peligro-suave); border-color: var(--peligro); animation: pulsoMic 1.1s ease-in-out infinite; }
+
+@keyframes pulsoMic {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+

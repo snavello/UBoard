@@ -473,6 +473,17 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     respuesta aunque la pregunta no lo mencione (paso 21). 345 tests
     backend en verde; sin tests nuevos de este paso salvo la corrida de
     referencia documentada.
+  - Adicional fuera del plan (pedido de Sd el mismo día): dictado por voz
+    en el cuadro de preguntas, HECHO 2026-09-12 (v0.22.01).
+    `asistente/vozWeb.ts` envuelve la Web Speech API del navegador
+    (`SpeechRecognition`/`webkitSpeechRecognition`, sin backend); un botón
+    de micrófono junto al campo de texto en las dos variantes de `Chat`,
+    que solo aparece si el navegador la soporta. Dicta a `es-AR`, llena el
+    campo, la persona revisa y envía como siempre (no manda solo por
+    dictar). Verificado que el botón aparece en las dos variantes y que el
+    click dispara el pedido de permiso de micrófono real del navegador (el
+    entorno de prueba lo bloquea por sandbox, pero confirma que el camino
+    llega); sin probar todavía con un micrófono real hablando de verdad.
   - **Fase 3 lista para que Sd la acepte** (no aceptada todavía).
 - Fase 4: no empezada.
 
@@ -908,6 +919,14 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   refresque sola. La acción `consultar` no se lista como "aplicada" (es de
   solo lectura, mostrar su JSON crudo era ruido): solo se muestran las que
   de verdad cambiaron algo.
+- **Dictado por voz** (`asistente/vozWeb.ts`): envuelve la Web Speech API
+  del navegador (`SpeechRecognition`/`webkitSpeechRecognition`, sin tipos
+  oficiales de TypeScript, declarados a mano); `obtenerConstructorDeVoz()`
+  devuelve `null` si el navegador no la tiene (Firefox, Safari en iOS), y
+  ahí `Chat` directamente no muestra el botón de micrófono. Dicta a
+  `es-AR`, llena el campo de texto (`interimResults` para ver el texto
+  parcial mientras habla) y para ahí: la persona revisa y envía a mano,
+  nunca se manda un mensaje solo por dictarlo.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

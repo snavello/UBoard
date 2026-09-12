@@ -187,11 +187,9 @@ el uso real crece mucho.
 - **Sin caché ni auditoría de tokens en el chat** (a propósito, ver
   "Costo" arriba); si el gasto real preocupa, se puede sumar un contador
   simple sin necesidad de cachear respuestas.
-- **Preguntas por voz**: Sd pidió durante esta fase que el cuadro de
-  preguntas del Tablero también acepte voz. No estaba en el plan
-  aprobado de la fase 3 (§4); queda para decidir el alcance (dictado a
-  texto en el navegador, con la Web Speech API, es lo más simple) antes de
-  encararlo como paso nuevo.
+- ~~Preguntas por voz~~: pedido de Sd durante esta fase, no estaba en el
+  plan original; agregado el mismo día con la Web Speech API del
+  navegador (dictado a texto, sin backend). Ver "Dictado por voz" abajo.
 - El wizard de fórmulas (paso 18) solo arma dos operandos por vez desde la
   pantalla; anidar más de un nivel requiere crear la fórmula interna como
   métrica separada primero. El chat, en cambio, puede armar un árbol
@@ -199,7 +197,25 @@ el uso real crece mucho.
 - Vendorear las fuentes de Google Fonts y partir el bundle de JS (896 KB)
   siguen pendientes de antes, sin relación con esta fase.
 
-## Docker: reconstruido y verificado (2026-09-12)
+## Dictado por voz (agregado el mismo día, a pedido de Sd)
+
+`asistente/vozWeb.ts`: la Web Speech API del navegador (`SpeechRecognition`
+o `webkitSpeechRecognition`), sin backend ni servicio externo. Un botón de
+micrófono aparece junto al campo de texto en las dos variantes del chat
+(el cuadro del Tablero y el panel flotante del constructor) **solo si el
+navegador la soporta** (Chrome/Edge; en Firefox y Safari el botón
+directamente no se muestra). Dicta a texto en `es-AR`, la persona revisa
+antes de enviar — no envía solo por dictar, evita mandar algo mal
+transcripto sin querer.
+
+Verificado en el navegador embebido (que sí expone la API): el botón
+aparece en las dos variantes, y al tocarlo dispara el pedido de permiso de
+micrófono del navegador de verdad (bloqueado en este entorno de pruebas
+por política del sandbox, pero eso confirma que el camino llega hasta ahí);
+si el permiso se niega o falla, el botón vuelve solo a su estado normal
+sin romper nada (`onerror`/`onend`). No se pudo probar con un micrófono
+real en esta sesión — falta la prueba con una persona hablando de verdad,
+para eso hace falta un navegador de escritorio normal, no el embebido.
 
 `docker compose up --build -d` reconstruyó la imagen sin problemas. La
 corrida de referencia de arriba se hizo enteramente contra el contenedor

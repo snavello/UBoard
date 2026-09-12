@@ -8,7 +8,7 @@
    En los dos casos cada pedido es independiente: el backend no persiste la
    conversacion (decidido en la fase 3), asi que el historial que se ve
    aca vive solo en el estado de esta pantalla y se pierde al refrescar. */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -17,6 +17,7 @@ import { Cargando } from "../compartido/componentes/Cargando";
 import { useSesion } from "../compartido/sesion";
 import type { FiltrosActivos, RespuestaAsistente } from "../tipos";
 import estilos from "./Chat.module.css";
+import { obtenerConstructorDeVoz, transcriptoDe, type ReconocimientoVoz } from "./vozWeb";
 
 // Las 14 operaciones del dashboard (paso 16): un cambio de estas se ve en el
 // Tablero; el resto de las operaciones (modelo) se ve en Modelo.
@@ -88,6 +89,34 @@ export function Chat({ variante = "flotante", filtrosActivos }: Props) {
     onError: (error) => agregarMensaje({ rol: "error", texto: mensajeDeError(error) }),
   });
 
+  // Dictado por voz (Web Speech API): sin backend, solo llena el campo de
+  // texto, la persona revisa y envia como siempre. Sin soporte del
+  // navegador (Firefox, Safari en iOS), el boton de microfono no aparece.
+  const ConstructorVoz = useMemo(() => obtenerConstructorDeVoz(), []);
+  const [escuchando, setEscuchando] = useState(false);
+  const reconocimientoRef = useRef<ReconocimientoVoz | null>(null);
+
+  useEffect(() => () => reconocimientoRef.current?.stop(), []);
+
+  const alternarMicrofono = () => {
+    if (escuchando) {
+      reconocimientoRef.current?.stop();
+      setEscuchando(false);
+      return;
+    }
+    if (!ConstructorVoz) return;
+    const reconocimiento = new ConstructorVoz();
+    reconocimiento.lang = "es-AR";
+    reconocimiento.interimResults = true;
+    reconocimiento.continuous = false;
+    reconocimiento.onresult = (evento) => setTexto(transcriptoDe(evento));
+    reconocimiento.onerror = () => setEscuchando(false);
+    reconocimiento.onend = () => setEscuchando(false);
+    reconocimientoRef.current = reconocimiento;
+    reconocimiento.start();
+    setEscuchando(true);
+  };
+
   const abiertoDeVerdad = variante === "inline" || abierto;
 
   useEffect(() => {
@@ -148,6 +177,19 @@ export function Chat({ variante = "flotante", filtrosActivos }: Props) {
           disabled={enviar.isPending}
           aria-label="Mensaje para el asistente"
         />
+        {ConstructorVoz && (
+          <button
+            type="button"
+            className={`${estilos.botonMic} ${escuchando ? estilos.escuchando : ""}`}
+            onClick={alternarMicrofono}
+            disabled={enviar.isPending}
+            aria-pressed={escuchando}
+            aria-label={escuchando ? "Detener el dictado por voz" : "Preguntar por voz"}
+            title={escuchando ? "Detener el dictado" : "Preguntar por voz"}
+          >
+            🎤
+          </button>
+        )}
         <button type="submit" className="boton boton--primario boton--chico" disabled={enviar.isPending || !texto.trim()}>
           {esVisualizador || variante === "inline" ? "Preguntar" : "Enviar"}
         </button>
