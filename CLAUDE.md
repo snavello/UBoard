@@ -409,7 +409,31 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     (32 k tokens de entrada por los 37 esquemas de herramientas), y "¿cuántas
     ventas hubo en total?" contestó bien usando `consultar`. 23 tests
     nuevos (341 en total).
-  - Pasos 20 a 22: pendientes.
+  - Paso 20 (chat del constructor): HECHO 2026-09-12 (v0.20.01).
+    `frontend/src/asistente/Chat.tsx`: un botón flotante ("💬 Asistente")
+    que abre un panel, montado en `Marco` (visible solo si
+    `usuario.rol === "constructor"`, así que aparece en cualquier pantalla
+    sin tocar cada página). Cada mensaje llama a `POST
+    /workspaces/{id}/asistente/mensajes` (paso 19) de forma independiente
+    (no hay historial server-side, según lo decidido); el historial que se
+    ve en el panel vive solo en el estado de React de esa pestaña. Por cada
+    acción aplicada se muestra el resumen que devuelve la herramienta con
+    un ✓ y un link a "Ver en el Tablero" o "Ver en Modelo" según si la
+    operación fue del dashboard o del modelo (`OPERACIONES_DASHBOARD`,
+    lista fija en el frontend, espejo de la de `dashboard/edicion.py`); si
+    hubo alguna acción, se invalidan las queries de `modelo` y `dashboard`
+    para que la pantalla que esté abierta se refresque sola. Verificado en
+    Docker con una organización descartable: "agregá un gráfico de ventas
+    por sucursal por mes" — el gráfico cruza dos dimensiones, que el
+    compilador no soporta en un solo panel, así que Claude preguntó si
+    quería la evolución mensual o el desglose por sucursal en vez de
+    inventar algo; con "de sucursal, barras" creó el gráfico correcto, que
+    apareció solo en el Tablero sin recargar la página. Confirmado además
+    que el visualizador no ve el botón (le toca su propio cuadro de
+    pregunta en el paso 21). Sin tests nuevos (frontend, se verifica en el
+    navegador como el resto de las pantallas desde el paso 6); build y
+    vitest sin cambios.
+  - Pasos 21 y 22: pendientes.
 - Fase 4: no empezada.
 
 ## Accesos de la demo local
@@ -819,6 +843,16 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   de versiones). Lo reemplazan el wizard (fase 2) y el chat (fase 3).
 - Google Fonts se carga por `<link>` en `index.html` con fallbacks
   (Georgia, Segoe UI). Pendiente vendorear las fuentes antes de producción.
+- **Chat del asistente** (`asistente/Chat.tsx`, paso 20): botón flotante +
+  panel, montado una sola vez en `Marco` y visible según el rol (solo
+  constructor por ahora; el cuadro de preguntas del visualizador del paso
+  21 es otro componente, en el Tablero). El historial de mensajes vive en
+  estado de React nomás (se pierde al refrescar, a propósito: el backend
+  no persiste la conversación); cada mensaje es un pedido independiente a
+  `POST /workspaces/{id}/asistente/mensajes`. Si la respuesta trae
+  acciones aplicadas, se invalidan `["modelo", workspaceId]` y
+  `["dashboard", workspaceId]` (con sus `"versiones"`) para que la pantalla
+  abierta se refresque sola, sin que la persona tenga que recargar.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

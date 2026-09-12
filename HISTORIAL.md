@@ -864,3 +864,70 @@ conversación, tope de vueltas (`test_motor.py`) — y el endpoint de punta a
 punta con los dos roles, sin clave configurada, sin modelo cargado, límite
 de vueltas (`test_asistente_api.py`). 341 tests backend en verde (3
 deselected: los dos en vivo de siempre más el nuevo de este paso).
+
+## 2026-09-12 — Fase 3, paso 20: chat del constructor (v0.20.01)
+
+Con el motor y el endpoint ya funcionando (paso 19), este paso fue
+enteramente de frontend: un componente de chat, disponible desde cualquier
+pantalla del constructor, como decía la duda 1 del plan de la fase 3
+("un solo chat... disponible desde cualquier pantalla del constructor,
+barra lateral o panel que se abre y cierra").
+
+`asistente/Chat.tsx` es un botón flotante ("💬 Asistente", esquina inferior
+derecha) que abre un panel. Se monta una sola vez, dentro de `Marco`
+(`compartido/componentes/Marco.tsx`), el envoltorio que ya usaban todas las
+páginas — así aparece en Fuentes, Modelo y Tablero sin tocar cada pantalla,
+condicionado a `usuario.rol === "constructor"`.
+
+La decisión más importante de este paso fue de diseño, no de código:
+mantener la decisión de la fase 3 de "no persistir la conversación" también
+en el frontend, no solo en el backend. Cada mensaje que la persona escribe
+dispara un pedido completamente independiente a `POST
+/workspaces/{id}/asistente/mensajes` — el backend arma el contexto desde
+cero cada vez (`armar_contexto`, ya existía del paso 19) y no tiene memoria
+de mensajes anteriores. El panel del chat sí muestra una lista de mensajes
+(para que la persona pueda releer lo que pidió y lo que se hizo), pero esa
+lista vive solo en el estado de React de esa pestaña: se pierde al
+refrescar, y el backend nunca la ve como tal.
+
+Esto tiene una consecuencia real que se verificó a propósito en la prueba:
+si Claude hace una pregunta aclaratoria ("¿querés la evolución mensual o el
+desglose por sucursal?") y la persona contesta con una frase corta ("de
+sucursal, barras"), esa respuesta corta viaja SOLA al backend, sin la
+pregunta que la motivó. Funcionó en la prueba porque Claude pudo inferir el
+pedido completo con el contexto del modelo (sabe que "sucursal" es un campo
+de `vendedores` y "barras" es un tipo de gráfico), pero es un límite real
+del diseño actual: un pedido más elíptico ("no, el otro vendedor") podría
+no tener con qué reconstruirse. Queda anotado como algo a revisar si hace
+falta un chat con memoria real entre mensajes (agregaría mandar el
+historial completo de bloques de Anthropic de ida y vuelta entre el
+frontend y el backend, sin persistir nada en la base — technically posible
+sin romper "no persistir conversación", pero no estaba pedido para este
+paso y se prefirió no adelantarlo sin que Sd lo pida).
+
+Por cada acción que el asistente aplica, se muestra el resumen que ya
+devuelve la herramienta (paso 19) con un ✓, más un link "Ver en el
+Tablero" o "Ver en Modelo" según si la operación tocó el dashboard o el
+modelo — una lista fija en el frontend (`OPERACIONES_DASHBOARD`) que
+espeja los nombres de las 14 operaciones de `dashboard/edicion.py`, para no
+tener que exponer esa clasificación desde el backend solo para esto. Si
+hubo alguna acción, se invalidan las queries de modelo y dashboard: la
+pantalla que esté abierta se refresca sola, sin que la persona tenga que
+recargar (se vio en la prueba: el gráfico nuevo apareció en el Tablero
+inmediatamente después de cerrar el chat, sin tocar nada más).
+
+Probado en Docker con una organización descartable (`PruebaChat`, borrada
+al terminar): el pedido exacto de la aceptación de la fase ("agregá un
+gráfico de ventas por sucursal por mes") activó la pregunta aclaratoria
+correcta porque ese gráfico cruzaría dos dimensiones, algo que el
+compilador no soporta en un panel — Claude no inventó un gráfico raro, hizo
+la pregunta que el prompt de sistema le pide hacer ante la ambigüedad. La
+respuesta "de sucursal, barras" produjo el gráfico correcto (`barras de
+total_ventas por vendedores.sucursal`), visible al instante en el Tablero.
+Se confirmó también que el visualizador no ve el botón del asistente (le
+toca su propio cuadro de preguntas en el Tablero, paso 21).
+
+Sin tests automáticos nuevos (frontend, se sigue verificando a mano en el
+navegador, igual que el resto de las pantallas desde el paso 6); build de
+Vite y vitest sin cambios (7 tests). La suite de backend no se tocó en este
+paso (341 tests, sin cambios).

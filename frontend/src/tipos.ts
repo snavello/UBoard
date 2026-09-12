@@ -375,3 +375,15 @@ export interface OrganizacionPlataforma {
 
 /* Filtros activos del dashboard: {id_filtro: valor} tal cual viaja en ?filtros= */
 export type FiltrosActivos = Record<string, unknown>;
+
+// Asistente (fase 3, paso 19-20): cada pedido al chat es independiente,
+// la conversacion no se persiste en el backend.
+export interface AccionAsistente {
+  herramienta: string;
+  resultado: string;
+}
+
+export interface RespuestaAsistente {
+  texto: string;
+  acciones: AccionAsistente[];
+}

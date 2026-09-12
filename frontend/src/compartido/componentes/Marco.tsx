@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 
+import { Chat } from "../../asistente/Chat";
 import type { Salud } from "../../tipos";
 import { pedir } from "../api";
 import { useSesion } from "../sesion";
@@ -78,6 +79,7 @@ export function Marco({ kicker, titulo, acciones, children }: Props) {
         )}
         <span className="mudo">UBoard</span>
       </footer>
+      {esConstructor && <Chat />}
     </div>
   );
 }
