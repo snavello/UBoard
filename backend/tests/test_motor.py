@@ -24,6 +24,14 @@ def test_armar_contexto_incluye_modelo_y_dashboard(workspace_listo, sesion_db):
     ids_metricas = {metrica["id"] for metrica in contexto["modelo"]["metricas"]}
     assert "total_ventas" in ids_metricas
     assert contexto["dashboard"]["titulo"] == "Ventas del almacén"
+    assert "filtros_activos" not in contexto
+
+
+def test_armar_contexto_incluye_filtros_activos_si_los_hay(workspace_listo, sesion_db):
+    import json
+
+    contexto = json.loads(motor.armar_contexto(sesion_db, workspace_listo, filtros_activos={"f_vendedor": ["Pérez"]}))
+    assert contexto["filtros_activos"] == {"f_vendedor": ["Pérez"]}
 
 
 def test_respuesta_de_texto_sin_herramientas(workspace_listo, datos, sesion_db, almacen_temporal, llm_falso):

@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 
+import { Chat } from "../asistente/Chat";
 import { codigoDeError, pedir, rutaWorkspace } from "../compartido/api";
 import { Aviso, AvisoError, ListaErrores } from "../compartido/componentes/Aviso";
 import { Cargando } from "../compartido/componentes/Cargando";
@@ -76,7 +77,12 @@ export function Tablero() {
   return (
     <Marco
       titulo={spec.titulo ?? "Tablero"}
-      acciones={<Filtros workspaceId={workspaceId} spec={spec} filtros={filtros} onCambiar={cambiarFiltros} />}
+      acciones={
+        <>
+          <Filtros workspaceId={workspaceId} spec={spec} filtros={filtros} onCambiar={cambiarFiltros} />
+          <Chat variante="inline" filtrosActivos={filtros} />
+        </>
+      }
     >
       {dashboard.data.advertencias.length > 0 && (
         <Aviso tipo="advertencia" titulo="El modelo cambió después de armar este tablero">

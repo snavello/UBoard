@@ -393,8 +393,8 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     = `model_json_schema()` de la clase Pydantic de siempre, sin el campo
     `operacion` que ya está en el nombre), más `consultar` (de solo
     lectura, mismo `ConsultaSemantica`/compilador de siempre, con
-    `filtros_base` para los filtros activos del Tablero que llegan en la
-    fase 4 del plan) y `restaurar_version` (deshacer, solo constructor).
+    `filtros_base` para los filtros activos del Tablero, que el paso 21 le
+    manda) y `restaurar_version` (deshacer, solo constructor).
     `catalogo_para_rol`: el visualizador solo tiene `consultar`. `app/
     asistente/motor.py`: `conversar()` arma el contexto (`armar_contexto`:
     modelo completo + dashboard actual, para que Claude sepa qué ids
@@ -433,7 +433,30 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     pregunta en el paso 21). Sin tests nuevos (frontend, se verifica en el
     navegador como el resto de las pantallas desde el paso 6); build y
     vitest sin cambios.
-  - Pasos 21 y 22: pendientes.
+  - Paso 21 (preguntas del visualizador): HECHO 2026-09-12 (v0.21.01).
+    `asistente/Chat.tsx` (paso 20) ganó `variante="inline"`: el mismo
+    componente, sin el botón flotante ni el panel posicionado fijo, montado
+    directamente en el `acciones` del Tablero (junto a `<Filtros>`),
+    visible para constructor y visualizador. `POST
+    /workspaces/{id}/asistente/mensajes` acepta ahora `filtros` (mismo
+    `{id_filtro: valor}` que `GET /dashboard?filtros=`); la API los resuelve
+    contra el spec actual con `dashboard.filtros.a_filtros_de_consulta`
+    (`E-SPEC-04` si algún id no existe) y los pasa como `filtros_activos` a
+    `motor.conversar`, que ya los aceptaba desde el paso 19
+    (`catalogo_para_rol(..., filtros_base=...)`): la herramienta
+    `consultar` los suma siempre a los que arme Claude, sin que dependa de
+    que los mencione. `armar_contexto` también los recibe (crudos) para que
+    la respuesta en texto los nombre cuando corresponda ("Ana Martínez
+    vendió..."), aunque el filtrado real no depende de eso. Corregido en el
+    camino un detalle de UI: la acción `consultar` no es una escritura, así
+    que no tiene que mostrarse con el ✓ de "acción aplicada" (mostraba el
+    JSON crudo de filas/columnas); ahora solo se listan las acciones que
+    modifican algo. Probado en Docker: con el filtro "Vendedor: Ana
+    Martínez" activo, la pregunta "¿cuánto vendió?" (sin nombrarla)
+    contestó "Ana Martínez vendió $3.757.825,46 en total", el mismo número
+    que sin filtrar por ese vendedor puntual pero acotado a sus ventas. 4
+    tests nuevos (345 en total).
+  - Paso 22: pendiente.
 - Fase 4: no empezada.
 
 ## Accesos de la demo local
@@ -690,6 +713,15 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   confirmar/rechazar por chat) y el dashboard actual como JSON compacto en
   el primer mensaje: Claude necesita ver los ids reales antes de poder
   referenciarlos en una herramienta.
+- **Filtros activos del Tablero** (paso 21): `POST .../asistente/mensajes`
+  acepta `filtros` (mismo `{id_filtro: valor}` de `GET /dashboard?filtros=`);
+  la API los resuelve contra el spec actual (`E-SPEC-04` si algún id no
+  existe) y se los pasa a `motor.conversar` como `filtros_activos`, que
+  termina en `filtros_base` de la herramienta `consultar`: se suman
+  SIEMPRE a los filtros que arme Claude, en el compilador, así que una
+  pregunta la responde bien aunque Claude no repita el filtro por su
+  cuenta. También van (crudos) en `armar_contexto`, solo para que la
+  respuesta en texto pueda nombrarlos.
 - **No se persiste la conversación** (decisión de la fase 3): lo único que
   queda en la base es lo que cada herramienta de escritura deja como
   versión nueva, exactamente igual que si lo hubiera hecho el wizard.
@@ -843,16 +875,22 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   de versiones). Lo reemplazan el wizard (fase 2) y el chat (fase 3).
 - Google Fonts se carga por `<link>` en `index.html` con fallbacks
   (Georgia, Segoe UI). Pendiente vendorear las fuentes antes de producción.
-- **Chat del asistente** (`asistente/Chat.tsx`, paso 20): botón flotante +
-  panel, montado una sola vez en `Marco` y visible según el rol (solo
-  constructor por ahora; el cuadro de preguntas del visualizador del paso
-  21 es otro componente, en el Tablero). El historial de mensajes vive en
-  estado de React nomás (se pierde al refrescar, a propósito: el backend
-  no persiste la conversación); cada mensaje es un pedido independiente a
-  `POST /workspaces/{id}/asistente/mensajes`. Si la respuesta trae
-  acciones aplicadas, se invalidan `["modelo", workspaceId]` y
-  `["dashboard", workspaceId]` (con sus `"versiones"`) para que la pantalla
-  abierta se refresque sola, sin que la persona tenga que recargar.
+- **Chat del asistente** (`asistente/Chat.tsx`, pasos 20 y 21): un solo
+  componente con dos `variante`s. `"flotante"` (por defecto): botón +
+  panel que se abre y cierra, montado una sola vez en `Marco`, visible solo
+  para el constructor en cualquier pantalla. `"inline"`: el cuadro de
+  preguntas del Tablero (junto a `<Filtros>`, en el `acciones` de `Marco`),
+  siempre visible, para constructor y visualizador, con `filtrosActivos`
+  (los mismos `FiltrosActivos` de la URL) mandado como `filtros` en cada
+  pedido. El historial de mensajes vive en estado de React nomás (se
+  pierde al refrescar, a propósito: el backend no persiste la
+  conversación); cada mensaje es un pedido independiente a `POST
+  /workspaces/{id}/asistente/mensajes`. Si la respuesta trae acciones
+  aplicadas, se invalidan `["modelo", workspaceId]` y `["dashboard",
+  workspaceId]` (con sus `"versiones"`) para que la pantalla abierta se
+  refresque sola. La acción `consultar` no se lista como "aplicada" (es de
+  solo lectura, mostrar su JSON crudo era ruido): solo se muestran las que
+  de verdad cambiaron algo.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

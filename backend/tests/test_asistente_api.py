@@ -1,5 +1,7 @@
-"""API del asistente (paso 19): un endpoint, dos catalogos segun el rol,
-con un ClienteFalso (nunca red)."""
+"""API del asistente (pasos 19 y 21): un endpoint, dos catalogos segun el
+rol, con un ClienteFalso (nunca red)."""
+import json
+
 import pytest
 
 
@@ -78,3 +80,27 @@ def test_limite_de_vueltas_es_502(cliente, workspace_listo, llm_falso):
     llm_falso(respuestas_chat=[pedido_tool] * 4)
     respuesta = cliente.post(_ruta(workspace_listo), json={"mensaje": "confirmá todo"})
     assert respuesta.status_code == 502 and respuesta.json()["codigo"] == "E-ASI-02"
+
+
+# ---------- Filtros del Tablero (paso 21) ----------
+def test_pregunta_del_visualizador_respeta_los_filtros_activos(cliente, workspace_listo, ingresar, llm_falso):
+    ingresar("visualizador@acme.test")
+    llm_falso(respuestas_chat=[[("consultar", {"metricas": ["cantidad_ventas"]})], "No encontré ventas de esa persona con los filtros activos."])
+    respuesta = cliente.post(_ruta(workspace_listo), json={"mensaje": "¿cuántas ventas tuvo?", "filtros": {"f_vendedor": ["nadie existe"]}})
+    assert respuesta.status_code == 200, respuesta.text
+    resultado = json.loads(respuesta.json()["acciones"][0]["resultado"])
+    assert resultado["filas"] == [[0]], "el filtro de vendedor tiene que dejar la consulta en cero filas coincidentes"
+
+
+def test_filtro_inexistente_es_e_spec_04(cliente, workspace_listo):
+    respuesta = cliente.post(_ruta(workspace_listo), json={"mensaje": "hola", "filtros": {"f_no_existe": ["x"]}})
+    assert respuesta.status_code == 404 and respuesta.json()["codigo"] == "E-SPEC-04"
+
+
+def test_sin_filtros_no_cambia_nada(cliente, workspace_listo, llm_falso):
+    """Un pedido sin `filtros` (o con {}) se comporta exactamente como antes del paso 21."""
+    llm_falso(respuestas_chat=[[("consultar", {"metricas": ["cantidad_ventas"]})], "Hubo 3000 ventas."])
+    respuesta = cliente.post(_ruta(workspace_listo), json={"mensaje": "¿cuántas ventas hubo?", "filtros": {}})
+    assert respuesta.status_code == 200
+    resultado = json.loads(respuesta.json()["acciones"][0]["resultado"])
+    assert resultado["filas"] == [[3000]]

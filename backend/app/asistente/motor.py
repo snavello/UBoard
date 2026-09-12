@@ -103,15 +103,21 @@ def _resumen_dashboard(spec) -> dict[str, Any]:
     }
 
 
-def armar_contexto(sesion: Session, workspace: Workspace) -> str:
+def armar_contexto(sesion: Session, workspace: Workspace, filtros_activos: dict[str, Any] | None = None) -> str:
     """Lo que Claude necesita para saber que ids existen: el modelo completo
     (con estado, para poder confirmar/rechazar) y el dashboard si ya hay
-    uno. JSON compacto, como el pedido de la inferencia (paso 11)."""
+    uno. JSON compacto, como el pedido de la inferencia (paso 11).
+    `filtros_activos` (paso 21, crudo: {id_filtro: valor}) va aparte para
+    que Claude pueda mencionarlos en la respuesta ("con los filtros que
+    tenés activos..."); el filtrado real de `consultar` no depende de esto,
+    lo aplica el motor sin importar si Claude lo nombra o no."""
     modelo = modelo_operaciones.modelo_de(modelo_operaciones.exigir_version_actual(sesion, workspace))
     contexto: dict[str, Any] = {"modelo": _resumen_modelo(modelo)}
     version_spec = dashboard_operaciones.version_actual(sesion, workspace)
     if version_spec is not None:
         contexto["dashboard"] = _resumen_dashboard(dashboard_operaciones.spec_de(version_spec))
+    if filtros_activos:
+        contexto["filtros_activos"] = filtros_activos
     return json.dumps(contexto, ensure_ascii=False, separators=(",", ":"), default=str)
 
 

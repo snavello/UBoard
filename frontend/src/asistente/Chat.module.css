@@ -29,3 +29,14 @@
 
 .formulario { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--linea); }
 .formulario input { flex: 1; }
+
+/* Cuadro de preguntas del Tablero (paso 21): siempre visible, cerca de los
+   filtros, sin la posicion fija del panel flotante. */
+.inline {
+  width: 100%; max-width: 460px; margin-top: 10px;
+  background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio);
+  display: flex; flex-direction: column;
+}
+.inline .mensajes { flex: none; max-height: 220px; padding: 10px 12px; }
+.inline .formulario { padding: 10px; }
+

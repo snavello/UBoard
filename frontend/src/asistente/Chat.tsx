@@ -1,8 +1,13 @@
-/* Chat del constructor (fase 3, paso 19-20): un panel que se abre y cierra,
-   disponible en cualquier pantalla del constructor (esta montado en Marco).
-   Cada pedido es independiente: el backend no persiste la conversacion
-   (decidido en la fase 3), asi que el historial que se ve aca vive solo en
-   esta pestania y se pierde al refrescar. */
+/* Chat del asistente (fase 3, pasos 19 a 21): un solo componente para las
+   dos interfaces del §1 de la especificacion. `variante="flotante"` es el
+   chat de escritura del constructor (boton + panel que se abre y cierra,
+   montado una sola vez en Marco, disponible en cualquier pantalla).
+   `variante="inline"` es el cuadro de preguntas del Tablero, para
+   constructor y visualizador, siempre visible cerca de los filtros y que
+   les manda como `filtros` (paso 21) para que la respuesta los respete.
+   En los dos casos cada pedido es independiente: el backend no persiste la
+   conversacion (decidido en la fase 3), asi que el historial que se ve
+   aca vive solo en el estado de esta pantalla y se pierde al refrescar. */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { mensajeDeError, pedir, rutaWorkspace } from "../compartido/api";
 import { Cargando } from "../compartido/componentes/Cargando";
 import { useSesion } from "../compartido/sesion";
-import type { RespuestaAsistente } from "../tipos";
+import type { FiltrosActivos, RespuestaAsistente } from "../tipos";
 import estilos from "./Chat.module.css";
 
 // Las 14 operaciones del dashboard (paso 16): un cambio de estas se ve en el
@@ -44,9 +49,15 @@ interface MensajeChat {
   acciones?: { herramienta: string; resultado: string }[];
 }
 
-export function Chat() {
+interface Props {
+  variante?: "flotante" | "inline";
+  filtrosActivos?: FiltrosActivos;
+}
+
+export function Chat({ variante = "flotante", filtrosActivos }: Props) {
   const { usuario } = useSesion();
   const workspaceId = usuario?.workspace_id ?? 0;
+  const esVisualizador = usuario?.rol === "visualizador";
   const clienteConsultas = useQueryClient();
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState("");
@@ -60,7 +71,11 @@ export function Chat() {
   };
 
   const enviar = useMutation({
-    mutationFn: (mensaje: string) => pedir<RespuestaAsistente>(rutaWorkspace(workspaceId, "/asistente/mensajes"), { method: "POST", json: { mensaje } }),
+    mutationFn: (mensaje: string) =>
+      pedir<RespuestaAsistente>(rutaWorkspace(workspaceId, "/asistente/mensajes"), {
+        method: "POST",
+        json: filtrosActivos && Object.keys(filtrosActivos).length > 0 ? { mensaje, filtros: filtrosActivos } : { mensaje },
+      }),
     onSuccess: (respuesta) => {
       agregarMensaje({ rol: "asistente", texto: respuesta.texto, acciones: respuesta.acciones });
       if (respuesta.acciones.length > 0) {
@@ -73,9 +88,11 @@ export function Chat() {
     onError: (error) => agregarMensaje({ rol: "error", texto: mensajeDeError(error) }),
   });
 
+  const abiertoDeVerdad = variante === "inline" || abierto;
+
   useEffect(() => {
-    if (abierto) finRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensajes, enviar.isPending, abierto]);
+    if (abiertoDeVerdad) finRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [mensajes, enviar.isPending, abiertoDeVerdad]);
 
   const enviarMensaje = (evento: React.FormEvent) => {
     evento.preventDefault();
@@ -85,6 +102,66 @@ export function Chat() {
     setTexto("");
     enviar.mutate(valor);
   };
+
+  const vacio = esVisualizador
+    ? 'Preguntale algo a tus datos, por ejemplo: "¿cuánto vendió Pérez en marzo?". Respeta los filtros activos.'
+    : variante === "inline"
+      ? 'Preguntale algo a tus datos (respeta los filtros activos), por ejemplo: "¿cuánto vendió Pérez en marzo?".'
+      : 'Por ejemplo: "agregá un gráfico de ventas por sucursal" o "creá una métrica margen que sea ventas menos costos".';
+
+  const contenido = (
+    <>
+      <div className={estilos.mensajes}>
+        {mensajes.length === 0 && <p className={`mudo ${estilos.vacio}`}>{vacio}</p>}
+        {mensajes.map((mensaje) => (
+          <div key={mensaje.id} className={`${estilos.mensaje} ${estilos[mensaje.rol]}`}>
+            <p>{mensaje.texto}</p>
+            {mensaje.acciones
+              ?.filter((accion) => accion.herramienta !== "consultar")
+              .map((accion, indice) => {
+                const enlace = enlaceDe(accion.herramienta);
+                return (
+                  <p key={indice} className={estilos.accion}>
+                    ✓ {accion.resultado}
+                    {enlace && (
+                      <>
+                        {" "}
+                        <Link to={enlace.to} onClick={() => setAbierto(false)}>
+                          {enlace.texto}
+                        </Link>
+                      </>
+                    )}
+                  </p>
+                );
+              })}
+          </div>
+        ))}
+        {enviar.isPending && <Cargando chico texto="Pensando…" />}
+        <div ref={finRef} />
+      </div>
+      <form className={estilos.formulario} onSubmit={enviarMensaje}>
+        <input
+          className="campo"
+          placeholder={esVisualizador || variante === "inline" ? "Preguntale algo a tus datos…" : "Pedile algo al asistente…"}
+          value={texto}
+          onChange={(evento) => setTexto(evento.target.value)}
+          disabled={enviar.isPending}
+          aria-label="Mensaje para el asistente"
+        />
+        <button type="submit" className="boton boton--primario boton--chico" disabled={enviar.isPending || !texto.trim()}>
+          {esVisualizador || variante === "inline" ? "Preguntar" : "Enviar"}
+        </button>
+      </form>
+    </>
+  );
+
+  if (variante === "inline") {
+    return (
+      <div className={estilos.inline} aria-label="Preguntale a tus datos">
+        {contenido}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -97,49 +174,7 @@ export function Chat() {
             <strong>Asistente</strong>
             <span className="mudo">Pedile cambios en lenguaje natural</span>
           </header>
-          <div className={estilos.mensajes}>
-            {mensajes.length === 0 && (
-              <p className={`mudo ${estilos.vacio}`}>
-                Por ejemplo: "agregá un gráfico de ventas por sucursal" o "creá una métrica margen que sea ventas menos costos".
-              </p>
-            )}
-            {mensajes.map((mensaje) => (
-              <div key={mensaje.id} className={`${estilos.mensaje} ${estilos[mensaje.rol]}`}>
-                <p>{mensaje.texto}</p>
-                {mensaje.acciones?.map((accion, indice) => {
-                  const enlace = enlaceDe(accion.herramienta);
-                  return (
-                    <p key={indice} className={estilos.accion}>
-                      ✓ {accion.resultado}
-                      {enlace && (
-                        <>
-                          {" "}
-                          <Link to={enlace.to} onClick={() => setAbierto(false)}>
-                            {enlace.texto}
-                          </Link>
-                        </>
-                      )}
-                    </p>
-                  );
-                })}
-              </div>
-            ))}
-            {enviar.isPending && <Cargando chico texto="Pensando…" />}
-            <div ref={finRef} />
-          </div>
-          <form className={estilos.formulario} onSubmit={enviarMensaje}>
-            <input
-              className="campo"
-              placeholder="Pedile algo al asistente…"
-              value={texto}
-              onChange={(evento) => setTexto(evento.target.value)}
-              disabled={enviar.isPending}
-              aria-label="Mensaje para el asistente"
-            />
-            <button type="submit" className="boton boton--primario boton--chico" disabled={enviar.isPending || !texto.trim()}>
-              Enviar
-            </button>
-          </form>
+          {contenido}
         </aside>
       )}
     </>

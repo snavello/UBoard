@@ -931,3 +931,69 @@ Sin tests automáticos nuevos (frontend, se sigue verificando a mano en el
 navegador, igual que el resto de las pantallas desde el paso 6); build de
 Vite y vitest sin cambios (7 tests). La suite de backend no se tocó en este
 paso (341 tests, sin cambios).
+
+## 2026-09-12 — Fase 3, paso 21: preguntas del visualizador (v0.21.01)
+
+Último paso de funcionalidad de la fase antes de la integración y
+aceptación (paso 22). El plan decía "cuadro de pregunta en el Tablero
+mismo, cerca de los filtros... el constructor lo tiene ahí también, además
+del chat de escritura" — y "mismo componente para el chat de escritura y
+el cuadro de preguntas". Con eso, el trabajo fue generalizar el `Chat.tsx`
+del paso 20 en vez de escribir uno nuevo.
+
+`Chat` ahora recibe una prop `variante` (`"flotante"`, la de siempre, o
+`"inline"`) y opcionalmente `filtrosActivos`. En modo inline no hay botón
+ni posición fija: se monta directamente en el `acciones` del Tablero,
+justo al lado de `<Filtros>`, y queda siempre visible — no hace falta
+abrirlo, porque en el Tablero "preguntar" es la acción principal, no una
+utilidad secundaria. El mismo componente, dos pantallas, dos formularios,
+sin duplicar la lógica de mandar el mensaje, mostrar "pensando" o listar
+las acciones aplicadas.
+
+La parte de backend fue chica porque el terreno ya estaba armado desde el
+paso 19: `motor.conversar` ya aceptaba un `filtros_activos` que reenviaba
+a `catalogo_para_rol(..., filtros_base=...)`, y la herramienta `consultar`
+ya sabía sumarlos a los filtros que arma Claude. Lo que faltaba era la
+punta que los trae desde afuera: `POST /asistente/mensajes` ahora acepta
+`filtros` en el cuerpo, con el mismo formato `{id_filtro: valor}` que ya
+usa `GET /dashboard?filtros=` desde la fase 1 — nada nuevo que aprender
+para el frontend, es literalmente el mismo objeto `FiltrosActivos` que ya
+tenía en la URL. La API los traduce a `FiltroConsulta` con
+`dashboard.filtros.a_filtros_de_consulta` (la misma función que usan los
+paneles del dashboard) y falla con `E-SPEC-04` si algún id de filtro ya no
+existe en el spec actual.
+
+Un detalle a propósito: los filtros van SIEMPRE a la consulta real,
+aunque Claude no los mencione ni los repita en los parámetros que arma
+para `consultar` — se suman en `_tool_consultar`, antes de compilar. Esto
+importaba porque no hay que confiar en que Claude "se acuerde" de aplicar
+el filtro: la garantía tiene que estar en el código, no en el prompt. Lo
+único que depende de Claude es que la RESPUESTA EN TEXTO los mencione con
+gracia (para eso se le pasan los filtros activos, crudos, en
+`armar_contexto`) — pero el número siempre sale bien aunque Claude no diga
+una palabra sobre el filtro.
+
+Al probar en el navegador apareció un detalle de UI que no se había visto
+antes porque el paso 20 solo probó acciones de escritura: la acción
+`consultar` se mostraba en el chat con el mismo ✓ que una operación real,
+pero el "resultado" de esa herramienta es el JSON crudo de columnas y
+filas (pensado para que lo lea Claude, no una persona) — se veía
+literalmente `{"columnas": [...], "filas": [[3757825.46, 243]]}` debajo de
+la respuesta en texto, que ya decía lo mismo en criollo. Se sacó
+`consultar` de la lista de "acciones aplicadas" que se muestran: esa lista
+es para operaciones que cambiaron algo, no para consultas de solo lectura,
+cuyo resultado ya está en el texto de la respuesta.
+
+Probado en Docker con una organización descartable, como constructor y
+como visualizador: activé el filtro "Vendedor: Ana Martínez" en el Tablero
+y le pregunté "¿cuánto vendió?" sin nombrarla — contestó "Ana Martínez
+vendió $3.757.825,46 en total, en 243 ventas", el número correcto para esa
+persona sola. Confirmé también que el constructor ve los dos widgets a la
+vez en el Tablero (el cuadro inline y el botón flotante), tal como pedía
+el plan.
+
+4 tests nuevos en el backend (filtros aplicados de verdad, filtro
+inexistente da `E-SPEC-04`, sin filtros se comporta igual que antes,
+`armar_contexto` los incluye cuando corresponde): 345 tests backend en
+verde. Sin tests de frontend nuevos (se verifica en el navegador, como
+todo el frontend desde el paso 6); build y vitest sin cambios.
