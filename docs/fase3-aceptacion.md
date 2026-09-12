@@ -150,8 +150,9 @@ Claude los repita (`test_pregunta_del_visualizador_respeta_los_filtros_activos`)
 345 tests de backend en verde por archivo (`for f in tests/test_*.py; do
 ../.venv/Scripts/python.exe -m pytest "$f" || break; done`), más los 3
 en vivo contra la API real de Anthropic (`pytest tests/test_llm_en_vivo.py
--m en_vivo -s`, deseleccionados por defecto). Build y 7 tests de vitest del
-frontend sin cambios.
+-m en_vivo -s`, deseleccionados por defecto). Build y 10 tests de vitest
+del frontend (7 de antes más los 3 del dictado por voz, agregado después
+de escribir esta primera versión del documento — ver más abajo).
 
 ## Costo de la API de Anthropic en esta fase
 
@@ -208,14 +209,28 @@ directamente no se muestra). Dicta a texto en `es-AR`, la persona revisa
 antes de enviar — no envía solo por dictar, evita mandar algo mal
 transcripto sin querer.
 
-Verificado en el navegador embebido (que sí expone la API): el botón
-aparece en las dos variantes, y al tocarlo dispara el pedido de permiso de
-micrófono del navegador de verdad (bloqueado en este entorno de pruebas
-por política del sandbox, pero eso confirma que el camino llega hasta ahí);
-si el permiso se niega o falla, el botón vuelve solo a su estado normal
-sin romper nada (`onerror`/`onend`). No se pudo probar con un micrófono
-real en esta sesión — falta la prueba con una persona hablando de verdad,
-para eso hace falta un navegador de escritorio normal, no el embebido.
+3 tests de vitest para `transcriptoDe` (junta los resultados parciales y
+finales en un solo texto; `frontend/src/asistente/vozWeb.test.ts` — 10 en
+total con los 7 que ya había).
+
+Verificado en el navegador embebido de la sesión (que sí expone la API):
+el botón aparece en las dos variantes, y al tocarlo dispara el pedido de
+permiso de micrófono del navegador de verdad (bloqueado en este entorno de
+pruebas por política del sandbox — no hay micrófono real ahí — pero eso
+confirma que el camino llega hasta ahí); si el permiso se niega o falla,
+el botón vuelve solo a su estado normal sin romper nada (`onerror`/
+`onend`). Para probar el resto de punta a punta sin un micrófono real, se
+interceptó el método `start()` del motor de reconocimiento (mismo
+mecanismo, sin tocar el código de la app) para que devolviera la
+transcripción "cuánto vendió Pérez en marzo" en vez de escuchar de
+verdad: el botón la puso en el campo de texto, y al enviarla el asistente
+contestó "Pérez vendió $258.409,96 en marzo de 2026" — el mismo número
+exacto de la corrida de referencia de arriba, confirmando que el dictado
+llega al chat igual que si se hubiera tipeado a mano. Lo único que
+**no** se pudo probar así es el reconocimiento de voz en sí (el motor de
+verdad entendiendo audio real) — Claude Code no tiene micrófono ni puede
+producir sonido, así que esa parte necesita una persona hablando frente a
+un micrófono real, en un navegador de escritorio normal (no el embebido).
 
 `docker compose up --build -d` reconstruyó la imagen sin problemas. La
 corrida de referencia de arriba se hizo enteramente contra el contenedor

@@ -1110,3 +1110,38 @@ Build de Vite y los 7 tests de vitest sin cambios (frontend puro, sin
 tests nuevos — se verifica en el navegador como el resto del frontend
 desde el paso 6); la suite de backend no se tocó (no hay cambios de
 backend en este agregado).
+
+## 2026-09-12 — Dictado por voz: prueba de punta a punta y tests (v0.22.02)
+
+Sd pidió probar el dictado por voz y avisarle dónde probarlo él. Como
+Claude Code no tiene micrófono ni puede producir sonido, lo primero fue
+decir eso con todas las letras: no se puede verificar el reconocimiento
+de voz en sí (el motor entendiendo audio real) sin una persona hablando.
+Lo que sí se podía hacer, y se hizo, fue probar todo lo demás.
+
+Se agregaron 3 tests de vitest para `transcriptoDe` (junta los resultados
+parciales y finales del reconocimiento en un solo texto), la única parte
+de `vozWeb.ts` que es una función pura y se puede probar sin un navegador
+de verdad — `obtenerConstructorDeVoz` lee `window`, que no existe en el
+entorno Node de vitest (ni acá ni en `formato.test.ts`, el único archivo
+de tests de frontend que había hasta ahora), así que esa función se dejó
+sin test automático y se verifica a mano en el navegador.
+
+Para la prueba de punta a punta sin un micrófono real, se interceptó
+`start()` del motor de reconocimiento en el navegador embebido de la
+sesión (mismo mecanismo real, `SpeechRecognition.prototype.start`
+reemplazado para que dispare `onresult` con una transcripción fija en vez
+de escuchar audio) — un truco de prueba, no un cambio en el código de la
+app. Con eso: tocar el botón de micrófono llenó el campo con "cuánto
+vendió Pérez en marzo" como si se hubiera dictado de verdad, y al enviarla
+el asistente contestó "Pérez vendió $258.409,96 en marzo de 2026" — el
+mismo número exacto de la corrida de referencia del paso 22, confirmando
+que el texto dictado llega al chat exactamente igual que si se hubiera
+tipeado. Eso prueba todo el camino propio del código (el botón, el estado
+de React, el pedido al asistente, la respuesta) — lo único que quedó sin
+probar es la parte que no depende del código de UBoard: si el motor de
+reconocimiento del navegador entiende bien lo que dice una persona.
+
+`docs/fase3-aceptacion.md` se actualizó con esta segunda vuelta de
+pruebas. 10 tests de vitest en total (345 de backend sin cambios, no se
+tocó nada del backend).

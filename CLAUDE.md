@@ -474,16 +474,20 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     backend en verde; sin tests nuevos de este paso salvo la corrida de
     referencia documentada.
   - Adicional fuera del plan (pedido de Sd el mismo día): dictado por voz
-    en el cuadro de preguntas, HECHO 2026-09-12 (v0.22.01).
+    en el cuadro de preguntas, HECHO 2026-09-12 (v0.22.02).
     `asistente/vozWeb.ts` envuelve la Web Speech API del navegador
     (`SpeechRecognition`/`webkitSpeechRecognition`, sin backend); un botón
     de micrófono junto al campo de texto en las dos variantes de `Chat`,
     que solo aparece si el navegador la soporta. Dicta a `es-AR`, llena el
     campo, la persona revisa y envía como siempre (no manda solo por
-    dictar). Verificado que el botón aparece en las dos variantes y que el
-    click dispara el pedido de permiso de micrófono real del navegador (el
-    entorno de prueba lo bloquea por sandbox, pero confirma que el camino
-    llega); sin probar todavía con un micrófono real hablando de verdad.
+    dictar). 3 tests de vitest para `transcriptoDe` (10 en total).
+    Verificado que el botón aparece en las dos variantes y que el click
+    dispara el pedido de permiso de micrófono real del navegador (el
+    entorno de prueba lo bloquea por sandbox); interceptando `start()` del
+    motor (sin tocar el código de la app) para simular una transcripción,
+    se probó la cadena completa hasta el asistente: contestó con el mismo
+    número exacto de la corrida de referencia. Lo único que no se puede
+    probar sin una persona hablando de verdad es el reconocimiento en sí.
   - **Fase 3 lista para que Sd la acepte** (no aceptada todavía).
 - Fase 4: no empezada.
 
