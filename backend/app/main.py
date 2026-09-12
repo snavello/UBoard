@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import app.ingesta.tarea  # noqa: F401  registra el manejador de ingesta en la cola
-from app.api import auth, dashboard, fuentes, modelo, plataforma, salud, tareas, workspaces
+from app.api import asistente, auth, dashboard, fuentes, modelo, plataforma, salud, tareas, workspaces
 from app.catalogo.sesion import nueva_sesion
 from app.nucleo.config import obtener_configuracion
 from app.nucleo.errores import registrar_manejadores
@@ -68,6 +68,7 @@ def crear_app() -> FastAPI:
     app.include_router(fuentes.router, prefix="/api")
     app.include_router(modelo.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
+    app.include_router(asistente.router, prefix="/api")
 
     _montar_frontend(app)
     return app

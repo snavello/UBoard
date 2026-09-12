@@ -218,10 +218,11 @@ def sin_red_llm():
 @pytest.fixture
 def llm_falso():
     """Devuelve una funcion que instala un ClienteFalso con las respuestas
-    dadas y lo retorna, para inspeccionar `pedidos` despues."""
+    dadas (de `completar` y/o de `conversar`, el chat del paso 19) y lo
+    retorna, para inspeccionar `pedidos`/`turnos_chat` despues."""
 
-    def _instalar(respuestas: list) -> ClienteFalso:
-        cliente_falso = ClienteFalso(respuestas, modelo="claude-falso")
+    def _instalar(respuestas: list | None = None, respuestas_chat: list | None = None) -> ClienteFalso:
+        cliente_falso = ClienteFalso(respuestas, respuestas_chat=respuestas_chat, modelo="claude-falso")
         fijar_cliente_llm(cliente_falso)
         return cliente_falso
 

@@ -764,3 +764,103 @@ número en el Tablero. La organización de prueba se borró al terminar.
 318 tests backend en verde por archivo (9 nuevos: 8 de validación y
 compilador más las extensiones a los de edición), build y vitest del
 frontend sin cambios.
+
+## 2026-09-12 — Fase 3, paso 19: motor del asistente (v0.19.01)
+
+Antes de escribir código, tal como decía el plan de la fase 3 en la sección
+de skills, se consultó al agente `claude-code-guide` para confirmar la
+forma vigente de tool-use multi-turno con la versión pinneada del SDK
+(`anthropic==1.4.0`): `messages.create` con `tools`, cada `tool_use` en
+`response.content` con `id`/`name`/`input`, `stop_reason == "tool_use"`
+para saber si hay que ejecutar algo, y la respuesta va como un mensaje
+`role: user` con uno o más bloques `tool_result` (`tool_use_id` + `content`
++ `is_error` opcional) — confirmó también que el SDK no impone un tope de
+vueltas automático (hay que escribir el loop a mano, que es justo lo que
+hacía falta para el tope duro de 4 que pedía el plan) y que hay un "tool
+runner" en beta que no convenía usar porque no da el control de logging por
+operación ni el tope exacto que se necesitaba.
+
+Con eso confirmado, el trabajo fue sobre todo de ensamblaje: casi todas las
+piezas que el asistente necesita ya existían de fases anteriores
+(`modelo/edicion.py` y `dashboard/edicion.py` con sus operaciones
+granulares tipadas del paso 12 y 16; `consultas/esquema.py` con
+`ConsultaSemantica`; el compilador). El paso 19 fue construir el puente
+entre esas piezas y Claude.
+
+`ClienteLLM` (paso 11) ganó `conversar()`, separado de `completar()` que
+sigue siendo para la salida estructurada de un solo turno de la
+inferencia. `conversar()` hace UN pedido y traduce la respuesta a
+`RespuestaConversacion`: los bloques crudos (para reenviarlos tal cual como
+el turno `assistant` siguiente, sin tener que reconstruirlos), la lista de
+llamadas a herramientas que pidió, el texto si respondió, y si es una
+respuesta final. El loop en sí (cuántas vueltas van, cuándo parar, qué
+hacer si una herramienta falla) vive en `motor.conversar`, no en el
+cliente: así el tope de vueltas y el logging de cada operación quedan en
+un solo lugar, sin depender de una utilidad de más alto nivel del SDK.
+
+`app/asistente/herramientas.py` arma el catálogo: una herramienta de
+Claude por cada una de las 35 operaciones granulares que ya existían (21
+del modelo, 14 del dashboard) más `consultar` (de solo lectura) y
+`restaurar_version` (deshacer). El `input_schema` de cada una sale de
+`model_json_schema()` de la clase Pydantic real, sacándole el campo
+`operacion` (ya está en el nombre de la herramienta, pedírselo de nuevo a
+Claude es redundante y podía confundir). Al pasar por `model_json_schema()`
+la `ExpresionFormula` recursiva del paso 18 sale con sus `$defs` y
+referencias sin problema — la documentación oficial de Anthropic acepta
+JSON Schema con referencias, no hace falta aplanar nada. `consultar` usa
+el `model_json_schema()` de `ConsultaSemantica` tal cual: es el mismo
+contrato que ya entendía el compilador desde el paso 5, cero traducción
+intermedia. El catálogo depende del rol (`catalogo_para_rol`): el
+visualizador solo tiene `consultar` (con `filtros_base` ya preparado para
+que la fase 21 le pase los filtros activos del Tablero sin tener que tocar
+esta firma), el constructor tiene además la escritura y el deshacer.
+
+Cuando una herramienta de escritura falla (por ejemplo, `eliminar_metrica`
+sobre una métrica que no existe, o que usa un cociente), el `ErrorApp` no
+corta la conversación: se traduce a un `tool_result` con `is_error: true`
+y el código + mensaje para la persona, y Claude sigue con eso — puede
+disculparse, preguntar de nuevo, o probar otra cosa, según el prompt de
+sistema ("contale a la persona qué pasó en criollo, sin mostrar códigos
+internos"). Si el visualizador (que no tiene las herramientas de escritura
+en su catálogo) igual las pidiera — no debería pasar con Claude real, pero
+se probó como caso defensivo — la herramienta no existe en su catálogo y
+se le devuelve `E-ASI-03` como si fuera cualquier otro error de
+herramienta, sin ejecutar nada.
+
+`armar_contexto` arma el primer mensaje: el modelo completo (con estado,
+para que el chat pueda confirmar/rechazar algo si hace falta) y el
+dashboard actual, como JSON compacto — Claude necesita ver los ids reales
+del workspace antes de poder referenciarlos en una llamada.
+
+Se decidió, siguiendo la duda 3 ya resuelta del plan de la fase 3, no
+persistir la conversación: el endpoint (`POST
+/workspaces/{id}/asistente/mensajes`, uno solo para constructor y
+visualizador, el rol decide el catálogo) no guarda mensajes en la base;
+lo único que persiste es lo que cada herramienta de escritura deja como
+versión nueva, exactamente el mismo mecanismo que si lo hubiera hecho el
+wizard — el historial y el deshacer del paso 17 sirven sin cambios.
+
+Probado en vivo contra Claude real (después de correr toda la suite de
+tests para no pisar la base de tests con dos corridas de Alembic al mismo
+tiempo — se probó una vez sin querer y salió "relation version_spec does
+not exist" a mitad de un test, porque el `alembic downgrade base` de una
+corrida le borró las tablas a la otra que estaba en el medio; no fue un
+bug del código, fue correr dos pytest contra la misma base a la vez):
+"Creá un gráfico de barras del total de ventas por sucursal" hizo
+exactamente esa llamada a `crear_grafico` y quedó guardado como versión 2
+del dashboard; "¿Cuántas ventas hubo en total?" contestó "En total hubo
+3000 ventas" usando `consultar`, sin inventar el número. El pedido de
+escritura gastó 32 288 tokens de entrada (el catálogo completo de 37
+herramientas con sus esquemas va en cada pedido) y 171 de salida — hay que
+tenerlo en cuenta para el tope de USD 10 de toda la fase, sobre todo
+cuando el chat esté en uso real (paso 20) y no solo en pruebas puntuales.
+
+23 tests nuevos: forma del catálogo por rol (puro), ejecución real de
+operaciones/consultar/restaurar contra los 5 CSV cargados
+(`test_herramientas.py`), el loop del motor con un `ClienteFalso`
+extendido con `respuestas_chat` — texto final, una herramienta, varias
+herramientas en un turno, error de herramienta que no corta la
+conversación, tope de vueltas (`test_motor.py`) — y el endpoint de punta a
+punta con los dos roles, sin clave configurada, sin modelo cargado, límite
+de vueltas (`test_asistente_api.py`). 341 tests backend en verde (3
+deselected: los dos en vivo de siempre más el nuevo de este paso).

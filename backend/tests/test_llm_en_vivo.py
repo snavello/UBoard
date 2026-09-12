@@ -117,3 +117,52 @@ def test_claude_cura_el_spec_base_sobre_los_5_csv(tmp_path):
     assert final.titulo and len(final.kpis) == len(base.kpis) and len(final.explorador.pestanias) == len(base.explorador.pestanias)
     assert 1 <= len(final.graficos) <= len(base.graficos)
     assert cruda.tokens_entrada < 8000, "el pedido de curacion tiene que ser chico"
+
+
+@pytest.mark.skipif(not obtener_configuracion().anthropic_api_key, reason="sin ANTHROPIC_API_KEY")
+def test_claude_usa_las_herramientas_del_asistente(cliente, datos, ingresar, cargar_datos_prueba, modelo_prueba, spec_prueba, sesion_db, almacen_temporal):
+    """El motor del asistente (paso 19) contra Claude de verdad: le pedimos
+    en criollo que cree una métrica y un gráfico, y que conteste una
+    pregunta sobre los datos reales."""
+    from app.asistente import motor
+    from app.catalogo.tablas import Workspace
+    from app.dashboard import operaciones as dashboard_operaciones
+
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    cargar_datos_prueba(workspace_id)
+    assert cliente.put(f"/api/workspaces/{workspace_id}/modelo", json=modelo_prueba).status_code == 201
+    assert cliente.put(f"/api/workspaces/{workspace_id}/dashboard", json=spec_prueba).status_code == 201
+    workspace = sesion_db.get(Workspace, workspace_id)
+
+    fijar_cliente_llm(None)  # el conftest instala un cliente falso en todos los tests; aca queremos el real
+    cliente_llm = obtener_cliente_llm()
+
+    respuesta = motor.conversar(
+        cliente_llm,
+        usuario=datos.acme_constructor,
+        sesion=sesion_db,
+        workspace=workspace,
+        almacen=almacen_temporal,
+        mensaje="Creá un gráfico de barras del total de ventas por sucursal.",
+        contexto=motor.armar_contexto(sesion_db, workspace),
+    )
+    print(f"\nrespuesta: {respuesta.texto}")
+    print("acciones:", [(a.herramienta, a.entrada, a.resultado) for a in respuesta.acciones])
+    print(f"tokens: {respuesta.tokens_entrada} entrada, {respuesta.tokens_salida} salida")
+    assert any(a.herramienta == "crear_grafico" for a in respuesta.acciones)
+    spec_actual = dashboard_operaciones.spec_de(dashboard_operaciones.exigir_version_actual(sesion_db, workspace))
+    assert any(g.dimension == "vendedores.sucursal" for g in spec_actual.graficos)
+
+    respuesta_pregunta = motor.conversar(
+        cliente_llm,
+        usuario=datos.acme_visualizador,
+        sesion=sesion_db,
+        workspace=workspace,
+        almacen=almacen_temporal,
+        mensaje="¿Cuántas ventas hubo en total?",
+        contexto=motor.armar_contexto(sesion_db, workspace),
+    )
+    print(f"\nrespuesta pregunta: {respuesta_pregunta.texto}")
+    assert any(a.herramienta == "consultar" for a in respuesta_pregunta.acciones)
+    assert "3000" in respuesta_pregunta.texto or "3.000" in respuesta_pregunta.texto

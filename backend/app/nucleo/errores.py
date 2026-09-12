@@ -67,6 +67,10 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-SPEC-06": (500, "El dashboard propuesto no pasó la validación. Revisá el detalle."),
     "E-SPEC-07": (400, "Operación desconocida o con parámetros inválidos."),
     "E-SPEC-08": (400, "Esa operación no se puede aplicar sobre el dashboard actual."),
+    "E-ASI-01": (502, "No pudimos consultar a Claude. Probá de nuevo en un momento."),
+    "E-ASI-02": (502, "El asistente no llegó a una respuesta después de varios pasos. Reformulá el pedido."),
+    "E-ASI-03": (500, "El asistente pidió algo que no sabemos hacer."),
+    "E-ASI-04": (400, "El asistente todavía no está configurado: falta la clave de Claude."),
     "E-INTERNO-00": (500, "Algo salió mal de nuestro lado. Probá de nuevo en un momento."),
 }
 

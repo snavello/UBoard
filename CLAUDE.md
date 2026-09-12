@@ -376,7 +376,40 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     × 2`, confirmadas en el wizard, y verificado el valor real vía KPI del
     dashboard (compilado y ejecutado contra Postgres/DuckDB, no solo
     validado). 9 tests nuevos (318 en total).
-  - Pasos 19 a 22: pendientes.
+  - Paso 19 (motor del asistente): HECHO 2026-09-12 (v0.19.01). Antes de
+    escribir código, se consultó al agente `claude-code-guide` para
+    confirmar la forma vigente de tool-use multi-turno con `anthropic==1.4.0`
+    (`messages.create` con `tools`; un bloque `tool_use` por herramienta
+    pedida, `stop_reason == "tool_use"`; se responde con un mensaje
+    `role: user` con uno o más bloques `tool_result`, `tool_use_id` +
+    `content` + `is_error` opcional). `ClienteLLM` gana `conversar()`
+    (un turno; el loop lo arma el llamador), con `RespuestaConversacion`
+    (`bloques` crudos para reenviar como turno `assistant`, `llamadas`,
+    `texto`, `es_final`); `ClienteFalso.conversar` acepta
+    `respuestas_chat` (un string = texto final, una lista de
+    `(nombre, entrada)` = herramientas pedidas en un turno). `app/asistente/
+    herramientas.py`: una herramienta de Claude por cada una de las 35
+    operaciones granulares (21 del modelo + 14 del dashboard, `input_schema`
+    = `model_json_schema()` de la clase Pydantic de siempre, sin el campo
+    `operacion` que ya está en el nombre), más `consultar` (de solo
+    lectura, mismo `ConsultaSemantica`/compilador de siempre, con
+    `filtros_base` para los filtros activos del Tablero que llegan en la
+    fase 4 del plan) y `restaurar_version` (deshacer, solo constructor).
+    `catalogo_para_rol`: el visualizador solo tiene `consultar`. `app/
+    asistente/motor.py`: `conversar()` arma el contexto (`armar_contexto`:
+    modelo completo + dashboard actual, para que Claude sepa qué ids
+    existen), corre el loop con tope `MAX_VUELTAS = 4` (si se pasa,
+    `E-ASI-02`), ejecuta cada herramienta pedida y le devuelve el resultado
+    o el error (`ErrorApp` se traduce a `tool_result` con `is_error: true`,
+    la conversación sigue). `POST /workspaces/{id}/asistente/mensajes`: un
+    solo endpoint para constructor y visualizador (`E-ASI-04` sin clave de
+    Claude configurada); no persiste la conversación, solo lo que cada
+    herramienta deja como versión nueva. Probado en vivo: "creá un gráfico
+    de barras del total de ventas por sucursal" creó el gráfico correcto
+    (32 k tokens de entrada por los 37 esquemas de herramientas), y "¿cuántas
+    ventas hubo en total?" contestó bien usando `consultar`. 23 tests
+    nuevos (341 en total).
+  - Pasos 20 a 22: pendientes.
 - Fase 4: no empezada.
 
 ## Accesos de la demo local
@@ -603,6 +636,50 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   heurística o Claude, toma los de la propuesta nueva.
 - Polling del frontend con `refetchIntervalInBackground: true`: la
   inferencia tarda 20 a 30 s y la gente cambia de pestaña.
+
+## Reglas del asistente (vigentes desde el paso 19)
+- **Un solo motor, dos catálogos** (`app/asistente/`): `herramientas.py`
+  arma la lista de tools de Claude según el rol (`catalogo_para_rol`) y
+  `motor.py` corre el loop de conversación (`conversar`). El visualizador
+  solo tiene `consultar`; el constructor tiene además las 35 operaciones
+  granulares (modelo + dashboard) y `restaurar_version`.
+- **Una herramienta de Claude por operación**, nunca una sola con un campo
+  "operación" adentro (elige mejor por nombre): el `input_schema` sale de
+  `model_json_schema()` de la clase Pydantic que ya existe en
+  `modelo/edicion.py` y `dashboard/edicion.py`, sacándole el campo
+  `operacion` (ya está en el nombre de la herramienta). `consultar` usa el
+  `model_json_schema()` de `ConsultaSemantica` tal cual: Claude arma
+  exactamente lo que el compilador espera, cero traducciones intermedias.
+- `ClienteLLM.conversar()` (separado de `completar()`, que sigue siendo
+  para la inferencia): un solo turno (`messages.create` con `tools`),
+  devuelve `RespuestaConversacion` (`bloques` crudos para reenviar tal cual
+  como turno `assistant`, `llamadas` con id/nombre/entrada de cada
+  `tool_use`, `texto`, `es_final` = `stop_reason != "tool_use"`). El loop
+  (tope `MAX_VUELTAS = 4`, si se pasa `E-ASI-02`) lo arma `motor.conversar`,
+  no el cliente: por cada llamada que pide Claude se ejecuta la herramienta
+  y se responde con un `tool_result` por `tool_use_id` (varias herramientas
+  en el mismo turno de Claude se responden todas juntas en un solo mensaje
+  siguiente). Un `ErrorApp` de una herramienta se traduce a
+  `tool_result` con `is_error: true` y el mensaje para la persona (código +
+  texto): la conversación sigue, no se corta.
+- `armar_contexto` manda el modelo completo (con estado, para poder
+  confirmar/rechazar por chat) y el dashboard actual como JSON compacto en
+  el primer mensaje: Claude necesita ver los ids reales antes de poder
+  referenciarlos en una herramienta.
+- **No se persiste la conversación** (decisión de la fase 3): lo único que
+  queda en la base es lo que cada herramienta de escritura deja como
+  versión nueva, exactamente igual que si lo hubiera hecho el wizard.
+- `POST /workspaces/{id}/asistente/mensajes` es el único endpoint, para
+  constructor y visualizador; el rol de la sesión decide el catálogo, el
+  frontend no elige herramientas. `E-ASI-04` si no hay clave de Claude
+  configurada (a diferencia de la inferencia, acá no hay "seguir sin
+  Claude": el chat no existe sin él).
+- Tests sin red: `ClienteFalso.conversar` acepta `respuestas_chat` (un
+  string = respuesta final en texto; una lista de `(nombre, entrada)` =
+  las herramientas que Claude pide en ese turno) y guarda cada turno en
+  `turnos_chat` para que los tests inspeccionen qué se le mandó. Vive el
+  mismo test en vivo (`test_llm_en_vivo.py`, marker `en_vivo`) que ya se
+  corría antes de tocar el prompt de la inferencia.
 
 ## Reglas del modelo semántico (vigentes desde el paso 4)
 - **Referencias**: `Entidad.fuente` = `nombre_tabla` de la fuente ingestada;
