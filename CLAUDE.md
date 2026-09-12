@@ -456,7 +456,24 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     contestó "Ana Martínez vendió $3.757.825,46 en total", el mismo número
     que sin filtrar por ese vendedor puntual pero acotado a sus ventas. 4
     tests nuevos (345 en total).
-  - Paso 22: pendiente.
+  - Paso 22 (integración y aceptación): HECHO 2026-09-12 (v0.21.02).
+    Checklist con evidencia en
+    [`docs/fase3-aceptacion.md`](docs/fase3-aceptacion.md): los dos casos
+    de la especificación probados en Docker contra Claude real. "Agregá un
+    gráfico de ventas por sucursal por mes" — el pedido cruza dos
+    dimensiones, que el compilador no soporta en un panel, así que el
+    asistente preguntó cuál de las dos quería en vez de inventar una
+    combinación; con la respuesta creó el gráfico correcto. "¿Cuánto
+    vendió Pérez en marzo?" encontró un bug real: el asistente filtraba
+    por nombre exacto y "Pérez" no matcheaba "María Pérez"; se agregó una
+    regla al prompt de sistema (usar `contiene` en vez de `igual` para
+    nombres parciales) y quedó resuelto, incluyendo el caso honesto de "no
+    hay ventas ese mes" (no inventa un número) y el caso con datos reales.
+    Confirmado además que un filtro activo del Tablero se aplica a la
+    respuesta aunque la pregunta no lo mencione (paso 21). 345 tests
+    backend en verde; sin tests nuevos de este paso salvo la corrida de
+    referencia documentada.
+  - **Fase 3 lista para que Sd la acepte** (no aceptada todavía).
 - Fase 4: no empezada.
 
 ## Accesos de la demo local

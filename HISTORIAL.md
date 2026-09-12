@@ -997,3 +997,65 @@ inexistente da `E-SPEC-04`, sin filtros se comporta igual que antes,
 `armar_contexto` los incluye cuando corresponde): 345 tests backend en
 verde. Sin tests de frontend nuevos (se verifica en el navegador, como
 todo el frontend desde el paso 6); build y vitest sin cambios.
+
+## 2026-09-12 — Fase 3, paso 22: integración y aceptación (v0.21.02)
+
+Último paso de la fase: `docs/fase3-aceptacion.md` con los dos casos
+exactos de la especificación (§9) probados en Docker contra Claude real,
+no simulados.
+
+El primer caso, "agregá un gráfico de ventas por sucursal por mes", puso
+en evidencia algo interesante de la propia frase: tal como está escrita
+pide cruzar dos dimensiones (sucursal y mes) en un gráfico, y el
+compilador nunca soportó eso — un gráfico es una métrica por UNA
+dimensión, desde el paso 6. El asistente no adivinó ni promedió las dos
+cosas en algo raro: preguntó cuál de las dos interpretaciones quería la
+persona, exactamente como le pide el prompt de sistema ante un pedido
+ambiguo. Con la respuesta ("de sucursal, en barras") creó el gráfico
+correcto de verdad, visible en el Tablero. Se documentó la conversación
+completa con los tokens de cada vuelta (16 e ~32 mil de entrada por
+mensaje, la mayor parte es el catálogo de 37 herramientas que va siempre).
+
+El segundo caso, "¿cuánto vendió Pérez en marzo?", encontró un bug real la
+primera vez que se probó: el asistente arma un filtro `igual` para nombres
+de personas, y "Pérez" no es igual a "María Pérez" — devolvió cero
+resultados y le preguntó a la persona el nombre completo, un
+comportamiento correcto (no inventó nada) pero que fallaba el caso más
+común, justo el que pide la especificación tal cual. Se agregó una regla
+al prompt de sistema (`app/asistente/motor.py`, `SISTEMA`): ante un nombre
+parcial o un dato de texto que puede no calzar exacto, usar el operador
+`contiene` antes que `igual`, y solo preguntar por el dato exacto si
+`contiene` tampoco encuentra nada. Con la regla, "Pérez" resolvió bien a
+"María Pérez" — y ahí apareció otro dato real: en la muestra sintética,
+esa vendedora no tuvo ventas en marzo de ningún año (3.000 filas repartidas
+entre 12 vendedores y ~12 meses, es esperable que algunas combinaciones den
+cero). El asistente contestó eso mismo, sin inventar una cifra, y ofreció
+preguntar por el año — que es la garantía central del asistente
+funcionando como se esperaba, no un caso roto. Preguntando con el año
+puesto ("marzo de 2026") contestó con el número real. De paso se reconfirmó
+el trabajo del paso 21: con un filtro de vendedor activo en el Tablero, una
+pregunta que no lo menciona igual contesta acotada a esa persona.
+
+Fuera de esos dos casos, el checklist de `fase3-aceptacion.md` repasa los
+7 pasos de la fase (16 a 22) con su evidencia ya documentada en los
+commits anteriores, más algunas garantías transversales que valía la pena
+dejar explícitas: el asistente nunca inventa un número (los dos casos de
+arriba lo prueban con datos reales, no solo con el cliente falso), una
+herramienta que falla no corta la conversación, y el visualizador no puede
+ejecutar una operación de escritura ni por accidente.
+
+Quedó anotada la deuda conocida de la fase, ninguna bloqueante: sin
+memoria de conversación entre mensajes distintos (decisión de la fase,
+paso 20), sin caché ni auditoría automática de tokens para el chat (a
+diferencia de la inferencia), y un pedido nuevo de Sd que llegó en medio de
+esta sesión — preguntas por voz en el cuadro del Tablero — que no estaba en
+el plan aprobado de la fase 3 y queda para decidir su alcance como paso
+aparte, probablemente ya en la fase 4 o como un paso corto antes.
+
+345 tests de backend en verde (sin tests nuevos de este paso: es
+verificación e integración, no funcionalidad); build y vitest del
+frontend sin cambios. La organización descartable de la corrida de
+referencia (`PruebaAceptacionFase3`) se borró al terminar; la demo no se
+tocó en ningún momento de la fase.
+
+**Fase 3 queda lista para que Sd la acepte.**
