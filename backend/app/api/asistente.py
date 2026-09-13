@@ -5,7 +5,10 @@ endpoint, un solo motor (`app/asistente/motor.py`); el historial de la
 conversacion no se persiste (cada accion real ya queda como version, eso
 alcanza). Si el pedido viaja con `filtros` (los activos del Tablero, mismo
 formato `{id_filtro: valor}` que `GET /dashboard?filtros=`), la herramienta
-`consultar` los aplica siempre, ademas de los que Claude arme."""
+`consultar` los aplica siempre, ademas de los que Claude arme. La
+herramienta `aplicar_filtro` (paso A de la fase 4) no toca la base: valida
+el filtro y devuelve su `entrada` en la accion para que el frontend lo
+aplique como si se hubiera tildado a mano (click-to-filter)."""
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -35,6 +38,7 @@ class MensajeEntrada(BaseModel):
 
 class AccionSalida(BaseModel):
     herramienta: str
+    entrada: dict[str, Any]
     resultado: str
 
 
@@ -73,4 +77,7 @@ def enviar_mensaje(
         contexto=contexto,
         filtros_activos=filtros_activos,
     )
-    return RespuestaSalida(texto=respuesta.texto, acciones=[AccionSalida(herramienta=accion.herramienta, resultado=accion.resultado) for accion in respuesta.acciones])
+    return RespuestaSalida(
+        texto=respuesta.texto,
+        acciones=[AccionSalida(herramienta=accion.herramienta, entrada=accion.entrada, resultado=accion.resultado) for accion in respuesta.acciones],
+    )

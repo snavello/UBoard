@@ -10,19 +10,19 @@ from app.nucleo.errores import ErrorApp
 
 
 # ---------- Forma del catalogo (puro: las funciones no se ejecutan) ----------
-def test_catalogo_constructor_tiene_las_35_operaciones_mas_consultar_y_restaurar():
+def test_catalogo_constructor_tiene_las_35_operaciones_mas_consultar_aplicar_filtro_y_restaurar():
     catalogo = catalogo_para_rol(RolUsuario.CONSTRUCTOR, sesion=None, workspace=None, almacen=None, usuario=None)
     nombres = [definicion["name"] for definicion in catalogo.definiciones]
-    assert len(nombres) == len(set(nombres)) == 37
-    assert {"consultar", "restaurar_version", "crear_metrica", "crear_grafico", "confirmar_todo"} <= set(nombres)
+    assert len(nombres) == len(set(nombres)) == 38
+    assert {"consultar", "aplicar_filtro", "restaurar_version", "crear_metrica", "crear_grafico", "confirmar_todo"} <= set(nombres)
     crear_metrica = next(d for d in catalogo.definiciones if d["name"] == "crear_metrica")
     assert "operacion" not in crear_metrica["input_schema"]["properties"], "el nombre de la herramienta ya lo dice"
     assert "expresion" in crear_metrica["input_schema"]["properties"]
 
 
-def test_catalogo_visualizador_solo_consultar():
+def test_catalogo_visualizador_solo_consultar_y_aplicar_filtro():
     catalogo = catalogo_para_rol(RolUsuario.VISUALIZADOR, sesion=None, workspace=None, almacen=None, usuario=None)
-    assert [definicion["name"] for definicion in catalogo.definiciones] == ["consultar"]
+    assert [definicion["name"] for definicion in catalogo.definiciones] == ["consultar", "aplicar_filtro"]
 
 
 def test_ejecutar_herramienta_desconocida():
@@ -105,6 +105,35 @@ def test_herramienta_consultar_respeta_filtros_base(workspace_listo, datos, sesi
 
     resultado = json.loads(catalogo.ejecutar("consultar", {"metricas": ["cantidad_ventas"], "dimensiones": [{"campo": "vendedores.nombre"}]}))
     assert resultado["filas"] == []
+
+
+def test_herramienta_aplicar_filtro_valida_y_no_toca_la_base(workspace_listo, datos, sesion_db, almacen_temporal):
+    from app.dashboard import operaciones as dashboard_operaciones
+
+    catalogo = catalogo_para_rol(
+        RolUsuario.VISUALIZADOR, sesion=sesion_db, workspace=workspace_listo, almacen=almacen_temporal, usuario=datos.acme_visualizador
+    )
+    resultado = catalogo.ejecutar("aplicar_filtro", {"filtro": "f_medio", "valor": ["Efectivo"]})
+    assert "Medio de pago" in resultado and "aplicado" in resultado
+    assert dashboard_operaciones.exigir_version_actual(sesion_db, workspace_listo).numero == 1, "no crea una version nueva"
+
+
+def test_herramienta_aplicar_filtro_id_inexistente_es_e_spec_04(workspace_listo, datos, sesion_db, almacen_temporal):
+    catalogo = catalogo_para_rol(
+        RolUsuario.VISUALIZADOR, sesion=sesion_db, workspace=workspace_listo, almacen=almacen_temporal, usuario=datos.acme_visualizador
+    )
+    with pytest.raises(ErrorApp) as error:
+        catalogo.ejecutar("aplicar_filtro", {"filtro": "f_no_existe", "valor": ["x"]})
+    assert error.value.codigo == "E-SPEC-04"
+
+
+def test_herramienta_aplicar_filtro_valor_con_forma_invalida_es_e_cons_06(workspace_listo, datos, sesion_db, almacen_temporal):
+    catalogo = catalogo_para_rol(
+        RolUsuario.VISUALIZADOR, sesion=sesion_db, workspace=workspace_listo, almacen=almacen_temporal, usuario=datos.acme_visualizador
+    )
+    with pytest.raises(ErrorApp) as error:
+        catalogo.ejecutar("aplicar_filtro", {"filtro": "f_medio", "valor": "Efectivo"})
+    assert error.value.codigo == "E-CONS-06"
 
 
 def test_herramienta_restaurar_version(workspace_listo, datos, sesion_db, almacen_temporal):

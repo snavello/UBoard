@@ -1145,3 +1145,97 @@ reconocimiento del navegador entiende bien lo que dice una persona.
 `docs/fase3-aceptacion.md` se actualizó con esta segunda vuelta de
 pruebas. 10 tests de vitest en total (345 de backend sin cambios, no se
 tocó nada del backend).
+
+## 2026-09-12 — Fase 4, paso A: click-to-filter y el asistente aplica filtros (v0.23.01)
+
+Sd pidió tres cosas de una: (1) que el chat pueda crear gráficos y filtros
+con condiciones que hoy no existen (ej. "torta de ventas en efectivo por
+vendedor" — una métrica filtrada, algo que ninguna fase anterior planeó),
+(2) que el cuadro de preguntas pueda "aplicar filtro de ventas en
+efectivo", y (3) que clickear un gráfico actúe como selector y filtre todo
+el tablero, "como Qlik" — la misma funcionalidad que quedó anotada como
+fuera de alcance para la fase 4 desde el primer día del proyecto
+("filtrado asociativo"). Sd agregó que ya había hecho algo así para el
+panel sindical del proyecto Mi Trabajo y pidió tomarlo de referencia.
+
+Antes de tocar código se investigó ese panel (agente de exploración de
+solo lectura sobre `C:\MiTrabajoC\validador-demo\validador-demo`). Hallazgo
+importante: no es el modelo asociativo completo de Qlik. No existe el
+tercer estado "posible" en gris (el propio documento de diseño de ese
+proyecto lo dice explícito: solo hay seleccionado vs. el resto). El
+mecanismo es un estado de filtros activos que vive en el frontend
+(reflejado en la URL), con un `onClick` por gráfico que alterna (toggle)
+un valor en ese estado, y cualquier cambio dispara de nuevo todos los
+paneles. Esto es, casi literalmente, lo que UBoard ya tenía armado desde
+la fase 1 para los chips de filtro (`FiltrosActivos` en la URL,
+`filtrosUrl.ts`, cada panel refetch al cambiar) — así que la parte de
+"click en un gráfico" resultó mucho más chica de lo que parecía al
+principio: no hace falta tocar el compilador ni el motor de consultas en
+absoluto, alcanza con conectar el click de ECharts al mismo mecanismo que
+ya usaban los chips.
+
+Con eso, se propuso partir el pedido en dos pasos: el paso A (click en un
+gráfico + el asistente aplica un filtro que ya existe, mismo mecanismo
+para las dos cosas) ahora; las métricas con un filtro propio (pedido 1)
+para después, porque esa sí necesita una pieza de modelado nueva
+(parecida a las fórmulas del paso 18) — no se puede resolver reusando lo
+que ya hay. Sd aprobó "vamos por el A, luego con el resto".
+
+`compartido/graficos/useGrafico.ts` ganó un parámetro `onClick` opcional:
+se engancha al evento nativo `click` de la instancia de ECharts y devuelve
+el `dataIndex` (la posición del punto clickeado en el arreglo de datos),
+uniforme entre barras, torta y línea. `visualizador/Grafico.tsx` calcula
+si el `campo` de algún filtro del spec (de tipo `lista` únicamente — un
+click no alcanza para armar un rango de fecha, así que los gráficos de
+línea, con dimensión de fecha, quedan afuera sin necesidad de un chequeo
+aparte) coincide con la `dimension` del gráfico; si coincide, el gráfico
+queda clickeable (cursor de mano, más una pista de texto "Clickeá para
+filtrar por..."), y clickear un punto arma `{...filtrosActivos, [id]:
+yaEsElUnico ? [] : [valor]}` con el mismo `onCambiar` que usan los chips
+de `Filtros.tsx`.
+
+Detalle de comportamiento que se aceptó a propósito, igual que en Mi
+Trabajo: el gráfico clickeado también se re-filtra a sí mismo (clickear
+"Ana Martínez" en "Top vendedores" hace que ese mismo gráfico, filtrado,
+muestre una sola barra). Es la consecuencia esperable de no tener el
+estado "posible" de Qlik — evitarlo pediría la complejidad que
+deliberadamente se dejó afuera.
+
+Del lado del asistente, `app/asistente/herramientas.py` ganó
+`aplicar_filtro`: a diferencia de todas las demás herramientas de
+escritura, está disponible para el VISUALIZADOR también (aplicar un
+filtro no es una operación de modelo o dashboard, es puro estado de
+pantalla) y no toca la base ni crea una versión — solo valida el filtro y
+el valor contra el spec actual, reusando exactamente
+`dashboard.filtros.a_filtros_de_consulta` (la misma función que ya
+resolvía `GET /dashboard?filtros=`). El resultado validado (`entrada`,
+`{filtro, valor}`) viaja de vuelta en la acción; para que el frontend lo
+vea, `AccionSalida` (API) y `AccionAsistente` (frontend) ganaron el campo
+`entrada`, que hasta ahora se guardaba pero no se exponía. `Chat.tsx`
+reconoce la herramienta `aplicar_filtro` en la respuesta y llama a un
+nuevo prop `onAplicarFiltro`, que en el Tablero está conectado al mismo
+`cambiarFiltros` que usan los chips y el click en un gráfico — un solo
+mecanismo, tres formas de dispararlo (chip, click, chat). Se actualizó el
+prompt de sistema para que Claude sepa cuándo usar `aplicar_filtro` en vez
+de tratar de contestar la pregunta con `consultar`.
+
+Probado en Docker con una organización descartable: clickear la barra de
+"Ana Martínez" en "Top vendedores" filtró todo el tablero (el KPI de total
+de ventas coincidió exacto con el número ya verificado en la aceptación de
+la fase 3, $3.757.825); clickear de nuevo sacó el filtro (verificado
+disparando el click por JavaScript directo sobre el canvas, porque el
+panel de pruebas de esta sesión tiene un desajuste de coordenadas conocido
+entre la captura de pantalla y los píxeles reales — no fue un bug del
+código). "Aplicá filtro de ventas en efectivo" en el cuadro de preguntas
+activó el chip "Medio de pago: Efectivo" sin crear ninguna versión nueva.
+
+4 tests nuevos en el backend (2 de forma del catálogo actualizados para el
+tool nuevo, 3 de ejecución real de `aplicar_filtro`, 1 de punta a punta en
+la API): 349 tests en total. Sin tests nuevos de frontend (se verifica en
+el navegador, como el resto del frontend desde el paso 6); build y vitest
+sin cambios.
+
+Quedan pendientes, sin planificar en detalle todavía: el estado
+"posible/excluido" en gris del modelo asociativo completo de Qlik, las
+métricas con un filtro propio (pedido 1 de Sd), y un diagrama visual del
+modelo tipo DER (pedido nuevo de Sd el mismo día, a evaluar aparte).

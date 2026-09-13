@@ -80,7 +80,11 @@ export function Tablero() {
       acciones={
         <>
           <Filtros workspaceId={workspaceId} spec={spec} filtros={filtros} onCambiar={cambiarFiltros} />
-          <Chat variante="inline" filtrosActivos={filtros} />
+          <Chat
+            variante="inline"
+            filtrosActivos={filtros}
+            onAplicarFiltro={(filtroId, valor) => cambiarFiltros({ ...filtros, [filtroId]: valor })}
+          />
         </>
       }
     >
@@ -96,11 +100,30 @@ export function Tablero() {
           <Kpis workspaceId={workspaceId} spec={spec} filtros={filtrosSerializados} />
         </aside>
         <section className={estilos.columnaGraficos} aria-label="Gráficos">
-          {graficoPrincipal && <Grafico workspaceId={workspaceId} grafico={graficoPrincipal} filtros={filtrosSerializados} alto={260} />}
+          {graficoPrincipal && (
+            <Grafico
+              workspaceId={workspaceId}
+              grafico={graficoPrincipal}
+              filtros={filtrosSerializados}
+              alto={260}
+              filtrosSpec={spec.filtros}
+              filtrosActivos={filtros}
+              onCambiarFiltros={cambiarFiltros}
+            />
+          )}
           {graficosSecundarios.length > 0 && (
             <div className={estilos.grilla}>
               {graficosSecundarios.map((grafico) => (
-                <Grafico key={grafico.id} workspaceId={workspaceId} grafico={grafico} filtros={filtrosSerializados} alto={220} />
+                <Grafico
+                  key={grafico.id}
+                  workspaceId={workspaceId}
+                  grafico={grafico}
+                  filtros={filtrosSerializados}
+                  alto={220}
+                  filtrosSpec={spec.filtros}
+                  filtrosActivos={filtros}
+                  onCambiarFiltros={cambiarFiltros}
+                />
               ))}
             </div>
           )}

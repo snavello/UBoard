@@ -104,3 +104,17 @@ def test_sin_filtros_no_cambia_nada(cliente, workspace_listo, llm_falso):
     assert respuesta.status_code == 200
     resultado = json.loads(respuesta.json()["acciones"][0]["resultado"])
     assert resultado["filas"] == [[3000]]
+
+
+# ---------- Click-to-filter, paso A de la fase 4 ----------
+def test_aplicar_filtro_del_asistente_devuelve_la_entrada_para_el_frontend(cliente, workspace_listo, ingresar, llm_falso):
+    ingresar("visualizador@acme.test")
+    llm_falso(respuestas_chat=[[("aplicar_filtro", {"filtro": "f_medio", "valor": ["Efectivo"]})], "Listo, filtrado por Efectivo."])
+    respuesta = cliente.post(_ruta(workspace_listo), json={"mensaje": "aplicá filtro de ventas en efectivo"})
+    assert respuesta.status_code == 200, respuesta.text
+    cuerpo = respuesta.json()
+    assert cuerpo["texto"] == "Listo, filtrado por Efectivo."
+    accion = cuerpo["acciones"][0]
+    assert accion["herramienta"] == "aplicar_filtro"
+    assert accion["entrada"] == {"filtro": "f_medio", "valor": ["Efectivo"]}
+    assert cliente.get(f"/api/workspaces/{workspace_listo}/dashboard").json()["numero"] == 1, "no crea una version nueva"

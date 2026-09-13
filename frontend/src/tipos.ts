@@ -380,6 +380,7 @@ export type FiltrosActivos = Record<string, unknown>;
 // la conversacion no se persiste en el backend.
 export interface AccionAsistente {
   herramienta: string;
+  entrada: Record<string, unknown>;
   resultado: string;
 }
 

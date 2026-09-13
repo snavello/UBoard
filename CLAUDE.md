@@ -489,7 +489,46 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     número exacto de la corrida de referencia. Lo único que no se puede
     probar sin una persona hablando de verdad es el reconocimiento en sí.
   - **Fase 3 lista para que Sd la acepte** (no aceptada todavía).
-- Fase 4: no empezada.
+- **Fase 4 — Interacción y filtrado asociativo: EN CURSO**, arrancada de
+  forma ad-hoc a pedido directo de Sd (todavía sin el documento de
+  lectura/dudas/decisiones/plan completo que llevan las fases anteriores,
+  por el tamaño acotado del primer paso; si la fase crece, corresponde
+  escribirlo).
+  - Paso A (click-to-filter + el asistente aplica un filtro existente):
+    HECHO 2026-09-12 (v0.23.01). Investigado primero el patrón del panel
+    sindical de Mi Trabajo (repo `validador-demo`) que Sd pidió tomar de
+    referencia: ahí tampoco hay el estado "posible" (gris) de Qlik
+    completo, solo seleccionado vs. el resto — mismo alcance que se
+    replicó acá. `compartido/graficos/useGrafico.ts` gana un `onClick`
+    opcional (evento nativo de ECharts, expone el `dataIndex`).
+    `visualizador/Grafico.tsx`: si la `dimension` del gráfico coincide con
+    el `campo` de un filtro de tipo `lista` del spec, el gráfico queda
+    clickeable (cursor y una pista de texto); clickear una barra o
+    porción alterna (toggle) ese valor en `FiltrosActivos`, el mismo
+    mecanismo que ya usaban los chips — sin tocar el compilador ni el
+    motor de consultas. Los gráficos de línea (dimensión de fecha, filtro
+    `rango_fecha`) quedan afuera a propósito: un click no alcanza para
+    armar un rango.
+    `app/asistente/herramientas.py` gana `aplicar_filtro` (disponible para
+    constructor Y visualizador, a diferencia de las demás herramientas de
+    escritura): no toca la base ni crea versión, solo valida el filtro y
+    el valor contra el spec actual (reusa `dashboard.filtros.
+    a_filtros_de_consulta`) y devuelve la `entrada` validada en la acción;
+    `Chat.tsx` la aplica con el mismo `onCambiarFiltros` que el click.
+    `AccionSalida`/`AccionAsistente` ganan el campo `entrada` para esto.
+    Sistema de prompt actualizado para que Claude use `aplicar_filtro`
+    ante un pedido de filtrar algo que ya existe, y no lo confunda con
+    `consultar`. Probado en Docker: clickear una barra de "Top
+    vendedores" filtra todo el tablero (mismos números que ya se habían
+    verificado antes), clickear de nuevo lo saca; "aplicá filtro de
+    ventas en efectivo" activa el chip "Medio de pago: Efectivo" sin
+    crear una versión nueva. 4 tests nuevos en el backend (349 en total);
+    sin tests nuevos de frontend (se verifica en el navegador).
+  - Pendiente, sin planificar todavía: el estado "posible/excluido" en
+    gris (asociativo completo estilo Qlik), métricas con un filtro propio
+    (ej. "ventas en efectivo por vendedor" como una sola métrica), y un
+    diagrama visual del modelo (tipo DER) — este último pedido por Sd el
+    mismo día que el paso A, a evaluar aparte.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):

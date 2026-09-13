@@ -3,5 +3,7 @@
 .cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .titulo { font-size: 20px; }
 .lienzo { width: 100%; }
+.clickeable { cursor: pointer; }
+.pista { display: block; font-size: 12px; }
 .vacio { display: grid; place-items: center; border: 1px dashed var(--linea); border-radius: var(--radio); }
 .tablaEnvoltorio { overflow: auto; border: 1px solid var(--linea); border-radius: var(--radio); }

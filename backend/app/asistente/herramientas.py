@@ -23,6 +23,7 @@ from app.consultas import consultar, parsear_consulta
 from app.consultas.esquema import ConsultaSemantica, FiltroConsulta
 from app.dashboard import edicion as dashboard_edicion
 from app.dashboard import operaciones as dashboard_operaciones
+from app.dashboard.filtros import a_filtros_de_consulta
 from app.modelo import edicion as modelo_edicion
 from app.modelo import operaciones as modelo_operaciones
 from app.nucleo.errores import ErrorApp
@@ -83,6 +84,12 @@ DESCRIPCION_RESTAURAR = (
     "Deshacer: vuelve a dejar como versión actual el contenido de una versión vieja del modelo o del dashboard. "
     "No borra el historial, crea una versión nueva con ese contenido."
 )
+DESCRIPCION_APLICAR_FILTRO = (
+    "Activa (reemplazando lo que tuviera antes) un filtro que YA EXISTE en el dashboard actual, para que la "
+    "persona lo vea marcado y afecte a toda la pantalla (KPIs, gráficos y explorador), igual que si lo hubiera "
+    "tildado a mano. Mirá los filtros disponibles (id, campo, tipo) en el contexto. Si lo que piden filtrar no "
+    "tiene un filtro creado todavía, no la uses: decile que hay que crear el filtro primero (`crear_filtro`)."
+)
 
 ESQUEMA_RESTAURAR: dict[str, Any] = {
     "type": "object",
@@ -91,6 +98,20 @@ ESQUEMA_RESTAURAR: dict[str, Any] = {
         "numero": {"type": "integer", "description": "Número de la versión a la que volver."},
     },
     "required": ["artefacto", "numero"],
+}
+ESQUEMA_APLICAR_FILTRO: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "filtro": {"type": "string", "description": "Id de un filtro que ya existe en el dashboard (ver el contexto)."},
+        "valor": {
+            "description": (
+                "El valor a activar: una lista de strings si el filtro es de tipo 'lista' (ej. [\"Efectivo\"]), o "
+                "[desde, hasta] en fecha ISO (\"AAAA-MM-DD\") si es 'rango_fecha' (cualquiera de los dos puede ir "
+                "en null para dejar ese extremo abierto)."
+            ),
+        },
+    },
+    "required": ["filtro", "valor"],
 }
 
 
@@ -185,6 +206,24 @@ def _tool_restaurar(sesion: Session, workspace: Workspace, usuario: Usuario) -> 
     return ejecutar
 
 
+def _tool_aplicar_filtro(sesion: Session, workspace: Workspace) -> EjecutorHerramienta:
+    """No toca la base ni crea una version: solo valida el filtro y el valor
+    contra el spec actual (mismo `a_filtros_de_consulta` que usa `GET
+    /dashboard?filtros=`) y se lo devuelve al frontend en `entrada` para que
+    lo aplique como si se hubiera tildado a mano (paso A de la fase 4)."""
+
+    def ejecutar(entrada: dict[str, Any]) -> str:
+        spec = dashboard_operaciones.spec_de(dashboard_operaciones.exigir_version_actual(sesion, workspace))
+        filtro_id = entrada.get("filtro")
+        definicion = spec.filtro(filtro_id) if isinstance(filtro_id, str) else None
+        if definicion is None:
+            raise ErrorApp("E-SPEC-04", f"filtro: {filtro_id!r}")
+        a_filtros_de_consulta(spec, {filtro_id: entrada.get("valor")})
+        return f"Filtro '{definicion.etiqueta or definicion.campo}' aplicado."
+
+    return ejecutar
+
+
 def catalogo_para_rol(
     rol: RolUsuario,
     *,
@@ -195,11 +234,17 @@ def catalogo_para_rol(
     filtros_base: list[FiltroConsulta] | None = None,
 ) -> CatalogoHerramientas:
     """El catalogo segun el rol de quien pregunta: el visualizador solo
-    puede consultar (respetando `filtros_base`, los filtros activos del
-    Tablero); el constructor tiene ademas las operaciones de escritura y
-    deshacer."""
-    definiciones: list[dict[str, Any]] = [{"name": "consultar", "description": DESCRIPCION_CONSULTAR, "input_schema": _ESQUEMA_CONSULTAR}]
-    ejecutores: dict[str, EjecutorHerramienta] = {"consultar": _tool_consultar(sesion, workspace, almacen, filtros_base or [])}
+    puede consultar y aplicar un filtro que ya exista (respetando
+    `filtros_base`, los filtros activos del Tablero); el constructor tiene
+    ademas las operaciones de escritura y deshacer."""
+    definiciones: list[dict[str, Any]] = [
+        {"name": "consultar", "description": DESCRIPCION_CONSULTAR, "input_schema": _ESQUEMA_CONSULTAR},
+        {"name": "aplicar_filtro", "description": DESCRIPCION_APLICAR_FILTRO, "input_schema": ESQUEMA_APLICAR_FILTRO},
+    ]
+    ejecutores: dict[str, EjecutorHerramienta] = {
+        "consultar": _tool_consultar(sesion, workspace, almacen, filtros_base or []),
+        "aplicar_filtro": _tool_aplicar_filtro(sesion, workspace),
+    }
 
     if rol == RolUsuario.CONSTRUCTOR:
         for definicion, _ in _OPERACIONES_MODELO:

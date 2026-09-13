@@ -15,7 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { mensajeDeError, pedir, rutaWorkspace } from "../compartido/api";
 import { Cargando } from "../compartido/componentes/Cargando";
 import { useSesion } from "../compartido/sesion";
-import type { FiltrosActivos, RespuestaAsistente } from "../tipos";
+import type { AccionAsistente, FiltrosActivos, RespuestaAsistente } from "../tipos";
 import estilos from "./Chat.module.css";
 import { obtenerConstructorDeVoz, transcriptoDe, type ReconocimientoVoz } from "./vozWeb";
 
@@ -39,7 +39,7 @@ const OPERACIONES_DASHBOARD = new Set([
 ]);
 
 function enlaceDe(herramienta: string): { to: string; texto: string } | null {
-  if (herramienta === "consultar" || herramienta === "restaurar_version") return null;
+  if (herramienta === "consultar" || herramienta === "restaurar_version" || herramienta === "aplicar_filtro") return null;
   return OPERACIONES_DASHBOARD.has(herramienta) ? { to: "/tablero", texto: "Ver en el Tablero" } : { to: "/modelo", texto: "Ver en Modelo" };
 }
 
@@ -47,15 +47,19 @@ interface MensajeChat {
   id: number;
   rol: "usuario" | "asistente" | "error";
   texto: string;
-  acciones?: { herramienta: string; resultado: string }[];
+  acciones?: AccionAsistente[];
 }
 
 interface Props {
   variante?: "flotante" | "inline";
   filtrosActivos?: FiltrosActivos;
+  // Click-to-filter (paso A de la fase 4): si el asistente aplica un
+  // filtro que ya existe, esto lo refleja en el mismo estado que usan los
+  // chips y el click en un grafico. Solo tiene sentido en el Tablero.
+  onAplicarFiltro?: (filtroId: string, valor: unknown) => void;
 }
 
-export function Chat({ variante = "flotante", filtrosActivos }: Props) {
+export function Chat({ variante = "flotante", filtrosActivos, onAplicarFiltro }: Props) {
   const { usuario } = useSesion();
   const workspaceId = usuario?.workspace_id ?? 0;
   const esVisualizador = usuario?.rol === "visualizador";
@@ -79,10 +83,16 @@ export function Chat({ variante = "flotante", filtrosActivos }: Props) {
       }),
     onSuccess: (respuesta) => {
       agregarMensaje({ rol: "asistente", texto: respuesta.texto, acciones: respuesta.acciones });
-      if (respuesta.acciones.length > 0) {
+      const artefactosTocados = respuesta.acciones.filter((accion) => accion.herramienta !== "aplicar_filtro");
+      if (artefactosTocados.length > 0) {
         for (const artefacto of ["modelo", "dashboard"]) {
           void clienteConsultas.invalidateQueries({ queryKey: [artefacto, workspaceId] });
           void clienteConsultas.invalidateQueries({ queryKey: [artefacto, workspaceId, "versiones"] });
+        }
+      }
+      for (const accion of respuesta.acciones) {
+        if (accion.herramienta === "aplicar_filtro" && typeof accion.entrada.filtro === "string") {
+          onAplicarFiltro?.(accion.entrada.filtro, accion.entrada.valor);
         }
       }
     },
