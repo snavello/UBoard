@@ -1539,3 +1539,103 @@ presentar — la fase 4 sigue abierta en los hechos (quedan pendientes
 conocidos, como el estado gris completo en los gráficos), así que por
 ahora esto es un cierre formal de lo hecho hasta acá, no un arranque de
 etapa nueva.
+
+## 2026-09-13 — Memoria corta del chat y UX de voz (v0.27.01)
+
+Con la fase 4 recién aceptada, Sd mandó un ejemplo real de un diálogo que
+"no puede pasar": le pidió algo al asistente, este propuso un gráfico
+("¿Te sirve así?"), Sd contestó "sí sirve", y el asistente respondió "¿A
+qué te referís con 'sí sirve'? No tengo el pedido anterior a la vista".
+No era un caso hipotético — era exactamente la limitación que ya estaba
+anotada como deuda conocida desde `docs/fase3-aceptacion.md` ("sin
+memoria de conversación entre mensajes... un pedido muy elíptico que
+dependa de lo dicho en el mensaje anterior puede no tener con qué
+reconstruirse") y que ese mismo documento proponía como arreglo futuro:
+"se puede agregar mandando el historial de turnos de ida y vuelta entre
+frontend y backend sin persistir nada en la base". Llegado el caso real,
+tocaba resolverlo.
+
+La decisión de diseño (fase 3, duda 3) de no persistir la conversación en
+la base **no cambió** — sigue sin haber una tabla de mensajes. Lo que se
+agregó es memoria de UNA conversación, viajando en cada pedido: el
+frontend ya guardaba todo el historial de la pantalla en su estado de
+React (se pierde al refrescar, siempre fue así); ahora ese mismo
+historial se manda como `historial` en el `POST .../asistente/mensajes`,
+y `motor.conversar` lo antepone a los mensajes que arma para Claude como
+turnos reales `user`/`assistant` (no como texto dentro del "Contexto
+actual" JSON, que es donde va el modelo y el dashboard) — así Claude ve
+literalmente lo que dijo antes, en su propio formato de conversación.
+Recortado a los últimos 6 turnos (constante `MAX_TURNOS_HISTORIAL`, en
+las dos puntas: el frontend igual manda su historial completo de la
+sesión, pero el motor solo usa los últimos 6 al armar el pedido) para que
+una conversación larga no infle el costo de cada pregunta sin límite. Se
+sumó además una regla explícita al prompt de sistema pidiéndole a Claude
+que, ante una confirmación corta a algo que él mismo propuso, actúe en
+vez de volver a preguntar — refuerzo, no reemplazo del historial real.
+
+Se reprodujo el bug tal cual en Docker antes de tocar código (pedirle
+"agregá un gráfico de ventas por medio de pago y por vendedor", que fuerza
+una aclaración porque cruza dos dimensiones, y contestar solo "sí sirve")
+y se confirmó el arreglo después: la misma secuencia ahora hace que el
+asistente aplique lo que había propuesto, sin preguntar de nuevo.
+
+De paso, cuatro pedidos de UX para el dictado por voz, todos sobre
+`asistente/Chat.tsx` y `vozWeb.ts`:
+
+1. **Auto-envío a los 4 segundos de silencio.** El reconocimiento pasó de
+   `continuous: false` (dejaba que el navegador decidiera solo cuándo
+   cortar, con su propia detección de pausas, poco controlable) a
+   `continuous: true`, y ahora es el propio componente el que mide el
+   silencio: cada resultado nuevo de voz reinicia un timer a 4000 ms: si
+   pasan los 4 segundos sin un resultado nuevo, se corta el dictado y se
+   manda la pregunta sola.
+2. **Botón "Stop".** El mismo botón de micrófono, mientras está
+   escuchando, pasa a mostrar `⏹` y su función cambia: en vez de solo
+   cortar el dictado (dejando lo transcripto en el campo, como antes),
+   corta Y BORRA el texto. La lógica: si la persona lo toca a mano en vez
+   de dejar que el silencio lo mande solo, es porque algo salió mal en la
+   transcripción y quiere descartarlo, no solo pausar.
+3. **Cancelar un pedido en vuelo** ("si se puede, también después de
+   enviar"). Mientras se espera la respuesta del asistente, el botón de
+   enviar se reemplaza por "Cancelar", que aborta el `fetch` con un
+   `AbortController` (el cliente HTTP `pedir()` ya soportaba `signal` sin
+   cambios, es una opción estándar de `fetch`). Un aborto deja un mensaje
+   neutro "Cancelado." en el chat en vez del texto crudo de `AbortError`.
+   Aclaración importante que quedó en `CLAUDE.md`: esto es "mejor
+   esfuerzo" del lado del navegador nomás — no hay forma de garantizar
+   que el pedido se corte también del lado del servidor sin agregar
+   chequeos de desconexión en cada vuelta del loop de herramientas, cosa
+   que no se hizo (no la pidió Sd, que dijo "si se puede").
+4. **Botón de cerrar (`✕`)** arriba a la derecha de la cabecera del panel
+   flotante del constructor, además del botón flotante de siempre (que
+   ahora dice siempre "💬 Asistente" en vez de alternar a "✕ Cerrar",
+   redundante con el nuevo botón).
+
+Y un quinto pedido, de layout, sin relación con la voz: el cuadro
+"Preguntale a tus datos" del Tablero es un 30% más ancho en pantallas de
+escritorio (`@media (min-width: 721px)`, el mismo umbral que ya usaban
+`Filtros` y `Marco` para distinguir mobile de desktop) — en mobile sigue
+igual que antes.
+
+Verificación en Docker: para el auto-envío y el botón Stop, se usó la
+misma técnica del paso de dictado original (interceptar `start()` y
+`stop()` del motor de reconocimiento del navegador, sin tocar código de
+la app) pero esta vez capturando la instancia real para poder disparar
+resultados de voz simulados con timing controlado dentro de un solo
+script: confirmado que a los 2 segundos de un resultado nuevo todavía no
+se había enviado nada, y que pasados los 4 segundos sin un resultado
+nuevo se envió solo; por separado, que tocar "Stop" corta el dictado,
+vacía el campo y que efectivamente no se manda nada aunque pase el mismo
+tiempo. Para "Cancelar", se mandó un pedido real y se lo abortó a los 30
+ms: apareció "Cancelado." y no se aplicó ninguna acción. Botón de cerrar
+y ancho del cuadro verificados por inspección del DOM y estilos
+computados.
+
+5 tests nuevos de backend (`test_motor.py`, `test_asistente_api.py`): que
+el historial llega como turnos `user`/`assistant` reales, que se recorta
+a los últimos `MAX_TURNOS_HISTORIAL`, que sin historial el comportamiento
+es exactamente el de antes, y que un turno con un rol inválido es
+`422` (361 tests en total). Sin tests nuevos de frontend — mismo criterio
+que el resto de esta pantalla desde el paso 20, se verifica a mano en el
+navegador. Organización de prueba (`PruebaMemoriaChat`) borrada al
+terminar.

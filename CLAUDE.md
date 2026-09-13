@@ -630,6 +630,40 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     código; organización de prueba borrada al terminar.
   - **Fase 4 aceptada por Sd el 2026-09-13** (junto con la fase 3,
     pendiente de esa misma confirmación desde el paso 22).
+  - Memoria corta del chat + UX de voz: HECHO 2026-09-13 (v0.27.01).
+    Sd reportó un bug real ya con la fase aceptada: el asistente proponía
+    un gráfico ("¿Te sirve así?"), Sd contestaba "sí sirve" y el
+    asistente respondía "¿A qué te referís? No tengo el pedido anterior a
+    la vista" — cada pedido llegaba sin memoria de los anteriores
+    (decisión original de la fase 3) y una confirmación corta no tenía
+    con qué reconstruirse. Se agregó `historial` al pedido (§ Reglas del
+    asistente): el frontend manda los últimos turnos de SU estado (nunca
+    se persiste nada nuevo), `motor.conversar` los antepone como mensajes
+    `user`/`assistant` reales antes del pedido nuevo, recortados a 6
+    turnos. Reproducido el bug exacto en Docker y confirmado el arreglo:
+    "sí sirve" sola, sin repetir nada, ahora hace que el asistente aplique
+    lo que había propuesto.
+    De paso, cuatro pedidos de UX para el dictado por voz: (1) auto-envío
+    a los 4 segundos de silencio, manejado con un timer propio en
+    `Chat.tsx` (`continuous: true` en el reconocimiento, que antes cortaba
+    solo en la primera pausa); (2) el botón de micrófono se vuelve "Stop"
+    (⏹) mientras escucha y, al tocarlo, corta el dictado Y borra el texto
+    transcripto (para descartar una transcripción que salió mal antes de
+    que se envíe sola); (3) mientras un pedido está en vuelo, el botón de
+    enviar se vuelve "Cancelar" (`AbortController`) — corta el pedido del
+    lado del navegador (no del servidor, es "mejor esfuerzo") y deja un
+    mensaje neutro "Cancelado."; (4) botón de cerrar (`✕`) arriba a la
+    derecha de la cabecera del panel flotante, además del botón flotante
+    de siempre. Y un ajuste de layout: el cuadro "Preguntale a tus datos"
+    del Tablero es 30% más ancho en pantallas de escritorio. Probado todo
+    en Docker interceptando `start()`/`stop()` del motor de reconocimiento
+    (mismo mecanismo del paso de dictado original, sin tocar código de la
+    app) para simular resultados de voz con timing controlado: confirmado
+    que el timer de silencio se reinicia con cada resultado nuevo, que
+    "Stop" corta el envío y limpia el campo, y que "Cancelar" aborta un
+    pedido real a mitad de camino. 5 tests nuevos de backend (361 en
+    total); sin tests nuevos de frontend (se verifica en el navegador,
+    mismo criterio que el resto de esta pantalla).
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -897,6 +931,17 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - **No se persiste la conversación** (decisión de la fase 3): lo único que
   queda en la base es lo que cada herramienta de escritura deja como
   versión nueva, exactamente igual que si lo hubiera hecho el wizard.
+- **Memoria corta de la conversación** (desde la fase 4, sin persistir
+  nada): `POST .../asistente/mensajes` acepta `historial`
+  (`[{rol: "usuario"|"asistente", texto}]`), los turnos previos de ESTA
+  conversación tal como los tiene el frontend en su estado. `motor.
+  conversar` los antepone a `mensajes` como turnos `user`/`assistant`
+  reales (no como parte del contexto JSON), recortados a los últimos
+  `MAX_TURNOS_HISTORIAL` (6) para no inflar el pedido sin límite a medida
+  que se alarga el chat. Sin esto, una confirmación corta ("sí, dale",
+  "sí sirve") a algo que Claude propuso en el mensaje anterior no tenía
+  con qué reconstruirse y terminaba preguntando "¿a qué te referís?" — hay
+  una regla explícita en `SISTEMA` para reforzarlo.
 - `POST /workspaces/{id}/asistente/mensajes` es el único endpoint, para
   constructor y visualizador; el rol de la sesión decide el catálogo, el
   frontend no elige herramientas. `E-ASI-04` si no hay clave de Claude
@@ -1076,27 +1121,46 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - **Chat del asistente** (`asistente/Chat.tsx`, pasos 20 y 21): un solo
   componente con dos `variante`s. `"flotante"` (por defecto): botón +
   panel que se abre y cierra, montado una sola vez en `Marco`, visible solo
-  para el constructor en cualquier pantalla. `"inline"`: el cuadro de
-  preguntas del Tablero (junto a `<Filtros>`, en el `acciones` de `Marco`),
-  siempre visible, para constructor y visualizador, con `filtrosActivos`
-  (los mismos `FiltrosActivos` de la URL) mandado como `filtros` en cada
-  pedido. El historial de mensajes vive en estado de React nomás (se
+  para el constructor en cualquier pantalla; el panel se cierra con la
+  `✕` de la cabecera (arriba a la derecha, pedido de Sd en la fase 4) o
+  volviendo a tocar el botón flotante, que ahora siempre dice "💬
+  Asistente" (antes alternaba a "✕ Cerrar", redundante con la `✕` nueva).
+  `"inline"`: el cuadro de preguntas del Tablero (junto a `<Filtros>`, en
+  el `acciones` de `Marco`), siempre visible, para constructor y
+  visualizador, con `filtrosActivos` (los mismos `FiltrosActivos` de la
+  URL) mandado como `filtros` en cada pedido; 30% más ancho en desktop
+  (`@media (min-width: 721px)`, mismo umbral que `Filtros`/`Marco`) desde
+  la fase 4. El historial de mensajes vive en estado de React nomás (se
   pierde al refrescar, a propósito: el backend no persiste la
-  conversación); cada mensaje es un pedido independiente a `POST
-  /workspaces/{id}/asistente/mensajes`. Si la respuesta trae acciones
-  aplicadas, se invalidan `["modelo", workspaceId]` y `["dashboard",
-  workspaceId]` (con sus `"versiones"`) para que la pantalla abierta se
-  refresque sola. La acción `consultar` no se lista como "aplicada" (es de
-  solo lectura, mostrar su JSON crudo era ruido): solo se muestran las que
-  de verdad cambiaron algo.
+  conversación) pero SÍ se le manda al backend como `historial` en cada
+  pedido (memoria corta, ver § Reglas del asistente) — sin esto el
+  asistente perdía el contexto ante una confirmación corta como "sí
+  sirve". Si la respuesta trae acciones aplicadas, se invalidan `["modelo",
+  workspaceId]` y `["dashboard", workspaceId]` (con sus `"versiones"`)
+  para que la pantalla abierta se refresque sola. La acción `consultar` no
+  se lista como "aplicada" (es de solo lectura, mostrar su JSON crudo era
+  ruido): solo se muestran las que de verdad cambiaron algo. Mientras un
+  pedido está pendiente, el botón de enviar se reemplaza por "Cancelar"
+  (`AbortController`, pasado como `signal` a `pedir()`); cancelar corta el
+  fetch y agrega un mensaje neutro "Cancelado." (rol `"sistema"`, sin el
+  color de error) en vez de mostrar el mensaje crudo de `AbortError`. Esto
+  no cancela nada del lado del servidor (Python puede seguir procesando el
+  pedido igual) — es un "mejor esfuerzo" client-side, no una garantía.
 - **Dictado por voz** (`asistente/vozWeb.ts`): envuelve la Web Speech API
   del navegador (`SpeechRecognition`/`webkitSpeechRecognition`, sin tipos
   oficiales de TypeScript, declarados a mano); `obtenerConstructorDeVoz()`
   devuelve `null` si el navegador no la tiene (Firefox, Safari en iOS), y
   ahí `Chat` directamente no muestra el botón de micrófono. Dicta a
-  `es-AR`, llena el campo de texto (`interimResults` para ver el texto
-  parcial mientras habla) y para ahí: la persona revisa y envía a mano,
-  nunca se manda un mensaje solo por dictarlo.
+  `es-AR` con `continuous: true` (desde la fase 4: antes era `false` y el
+  navegador cortaba solo en la primera pausa corta, cosa que no se podía
+  controlar) — el propio `Chat.tsx` maneja el silencio con su timer: cada
+  `onresult` lo reinicia a `SILENCIO_PARA_AUTOENVIAR_MS` (4000); si pasan
+  4 segundos sin un `onresult` nuevo, se corta el dictado y se envía sola
+  la pregunta, sin que la persona tenga que tocar nada. El mismo botón de
+  micrófono pasa a ser el botón "Stop" (ícono `⏹`) mientras está
+  escuchando: tocarlo corta el dictado Y BORRA el texto transcripto hasta
+  ahí (si la persona lo para a mano en vez de dejar que el silencio lo
+  mande solo, es porque algo salió mal en la transcripción).
 - **Diagrama del modelo** (`constructor/diagramaLayout.ts` +
   `Diagrama.tsx`, pestaña "Diagrama" en Modelo): SVG a mano, sin librería
   de diagramas. El layout es puro y se prueba con vitest

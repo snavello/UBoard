@@ -1,15 +1,19 @@
 """API del asistente (fase 3, pasos 19 y 21): un chat con Claude, con
 distinto catalogo de herramientas segun el rol de quien pregunta
 (constructor: lectura y escritura; visualizador: solo lectura). Un solo
-endpoint, un solo motor (`app/asistente/motor.py`); el historial de la
-conversacion no se persiste (cada accion real ya queda como version, eso
-alcanza). Si el pedido viaja con `filtros` (los activos del Tablero, mismo
-formato `{id_filtro: valor}` que `GET /dashboard?filtros=`), la herramienta
-`consultar` los aplica siempre, ademas de los que Claude arme. La
-herramienta `aplicar_filtro` (paso A de la fase 4) no toca la base: valida
-el filtro y devuelve su `entrada` en la accion para que el frontend lo
-aplique como si se hubiera tildado a mano (click-to-filter)."""
-from typing import Any
+endpoint, un solo motor (`app/asistente/motor.py`); NADA de esto se
+persiste en la base (cada accion real ya queda como version, eso alcanza)
+— el `historial` que manda el pedido es memoria corta de la conversacion
+tal como la tiene el frontend en su estado (fase 4: sin esto, una
+confirmacion corta como "sí, dale" a algo que Claude propuso en el
+mensaje anterior no tenia con que reconstruirse). Si el pedido viaja con
+`filtros` (los activos del Tablero, mismo formato `{id_filtro: valor}`
+que `GET /dashboard?filtros=`), la herramienta `consultar` los aplica
+siempre, ademas de los que Claude arme. La herramienta `aplicar_filtro`
+(paso A de la fase 4) no toca la base: valida el filtro y devuelve su
+`entrada` en la accion para que el frontend lo aplique como si se
+hubiera tildado a mano (click-to-filter)."""
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -31,9 +35,19 @@ from app.nucleo.errores import ErrorApp
 router = APIRouter(prefix="/workspaces/{workspace_id}/asistente", tags=["asistente"])
 
 
+class TurnoEntrada(BaseModel):
+    rol: Literal["usuario", "asistente"]
+    texto: str = Field(min_length=1, max_length=4000)
+
+
 class MensajeEntrada(BaseModel):
     mensaje: str = Field(min_length=1, max_length=2000)
     filtros: dict[str, Any] | None = Field(default=None, description='Filtros activos del Tablero, {id_filtro: valor} (paso 21).')
+    historial: list[TurnoEntrada] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Turnos previos de esta conversacion (memoria corta, el frontend la guarda en su estado; no se persiste en la base).",
+    )
 
 
 class AccionSalida(BaseModel):
@@ -76,6 +90,7 @@ def enviar_mensaje(
         mensaje=entrada.mensaje,
         contexto=contexto,
         filtros_activos=filtros_activos,
+        historial=[turno.model_dump() for turno in entrada.historial],
     )
     return RespuestaSalida(
         texto=respuesta.texto,

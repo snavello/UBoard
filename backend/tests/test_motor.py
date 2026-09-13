@@ -49,6 +49,57 @@ def test_respuesta_de_texto_sin_herramientas(workspace_listo, datos, sesion_db, 
     assert len(cliente_falso.turnos_chat) == 1
 
 
+def test_historial_se_manda_como_turnos_previos(workspace_listo, datos, sesion_db, almacen_temporal, llm_falso):
+    """El bug real que motivó esto: el asistente propone un gráfico, la
+    persona contesta "sí sirve" (sin repetir el pedido) y, sin el turno
+    anterior a la vista, Claude no tiene con qué reconstruirlo."""
+    cliente_falso = llm_falso(respuestas_chat=[[("crear_grafico", {"tipo": "barras", "metrica": "total_ventas", "dimension": "vendedores.sucursal"})], "Listo."])
+    motor.conversar(
+        cliente_falso,
+        usuario=datos.acme_constructor,
+        sesion=sesion_db,
+        workspace=workspace_listo,
+        almacen=almacen_temporal,
+        mensaje="sí sirve",
+        contexto="{}",
+        historial=[
+            {"rol": "usuario", "texto": "quiero un ranking de ventas por sucursal"},
+            {"rol": "asistente", "texto": "Te propongo un gráfico de barras de ventas por sucursal. ¿Te sirve así?"},
+        ],
+    )
+    primer_turno = cliente_falso.turnos_chat[0]
+    assert primer_turno[0] == {"role": "user", "content": "quiero un ranking de ventas por sucursal"}
+    assert primer_turno[1] == {"role": "assistant", "content": "Te propongo un gráfico de barras de ventas por sucursal. ¿Te sirve así?"}
+    assert primer_turno[2]["role"] == "user" and "Pedido: sí sirve" in primer_turno[2]["content"]
+
+
+def test_historial_se_recorta_a_los_ultimos_turnos(workspace_listo, datos, sesion_db, almacen_temporal, llm_falso):
+    cliente_falso = llm_falso(respuestas_chat=["ok"])
+    historial_largo = [{"rol": "usuario" if i % 2 == 0 else "asistente", "texto": f"turno {i}"} for i in range(10)]
+    motor.conversar(
+        cliente_falso,
+        usuario=datos.acme_constructor,
+        sesion=sesion_db,
+        workspace=workspace_listo,
+        almacen=almacen_temporal,
+        mensaje="segui",
+        contexto="{}",
+        historial=historial_largo,
+    )
+    primer_turno = cliente_falso.turnos_chat[0]
+    # Los ultimos MAX_TURNOS_HISTORIAL (6) mas el mensaje nuevo
+    assert len(primer_turno) == motor.MAX_TURNOS_HISTORIAL + 1
+    assert primer_turno[0]["content"] == "turno 4"
+
+
+def test_sin_historial_se_comporta_como_antes(workspace_listo, datos, sesion_db, almacen_temporal, llm_falso):
+    cliente_falso = llm_falso(respuestas_chat=["ok"])
+    motor.conversar(
+        cliente_falso, usuario=datos.acme_constructor, sesion=sesion_db, workspace=workspace_listo, almacen=almacen_temporal, mensaje="hola", contexto="{}"
+    )
+    assert len(cliente_falso.turnos_chat[0]) == 1
+
+
 def test_una_herramienta_y_despues_respuesta_final(workspace_listo, datos, sesion_db, almacen_temporal, llm_falso):
     cliente_falso = llm_falso(
         respuestas_chat=[

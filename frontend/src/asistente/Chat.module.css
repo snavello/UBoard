@@ -14,6 +14,12 @@
 
 .cabecera { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-bottom: 1px solid var(--linea); }
 .cabecera span { font-size: 12px; }
+.cabeceraFila { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.botonCerrar {
+  border: none; background: none; padding: 4px; margin: -4px;
+  font-size: 15px; line-height: 1; color: var(--tinta-2); cursor: pointer; border-radius: var(--radio);
+}
+.botonCerrar:hover { background: var(--superficie-2); color: var(--tinta); }
 
 .mensajes { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .vacio { font-size: 13px; }
@@ -23,6 +29,7 @@
 .mensaje.usuario { align-self: flex-end; background: var(--acento-suave); }
 .mensaje.asistente { align-self: flex-start; background: var(--superficie-2); }
 .mensaje.error { align-self: flex-start; background: var(--peligro-suave); color: var(--peligro); }
+.mensaje.sistema { align-self: center; background: none; color: var(--mudo); font-size: 12px; padding: 2px 8px; }
 
 .accion { margin-top: 6px !important; font-size: 12px; color: var(--tinta-2); }
 .accion a { margin-left: 4px; }
@@ -39,6 +46,12 @@
 }
 .inline .mensajes { flex: none; max-height: 220px; padding: 10px 12px; }
 .inline .formulario { padding: 10px; }
+
+/* 30% mas ancho en desktop (pedido de Sd); mismo umbral que Filtros y
+   Marco (721px = "no es mobile"). */
+@media (min-width: 721px) {
+  .inline { max-width: 598px; }
+}
 
 /* Dictado por voz: boton redondo entre el campo y "Enviar"/"Preguntar". */
 .botonMic {

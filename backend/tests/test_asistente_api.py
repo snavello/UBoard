@@ -56,6 +56,32 @@ def test_mensaje_vacio_es_400(cliente, workspace_listo):
     assert cliente.post(_ruta(workspace_listo), json={"mensaje": ""}).status_code == 422
 
 
+def test_historial_llega_a_claude_como_turnos_previos(cliente, workspace_listo, llm_falso):
+    """Reproduce el bug que Sd reportó: el asistente propone algo y "sí
+    sirve" (sin repetir el pedido) tiene que alcanzar para que lo aplique."""
+    cliente_falso = llm_falso(respuestas_chat=[[("crear_kpi", {"metrica": "cantidad_ventas", "titulo": "Cantidad"})], "Listo, creé el KPI 'Cantidad'."])
+    respuesta = cliente.post(
+        _ruta(workspace_listo),
+        json={
+            "mensaje": "sí sirve",
+            "historial": [
+                {"rol": "usuario", "texto": "quiero ver la cantidad de ventas"},
+                {"rol": "asistente", "texto": "Te propongo un KPI 'Cantidad'. ¿Te sirve así?"},
+            ],
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["texto"] == "Listo, creé el KPI 'Cantidad'."
+    primer_turno = cliente_falso.turnos_chat[0]
+    assert primer_turno[0]["content"] == "quiero ver la cantidad de ventas"
+    assert primer_turno[1]["content"] == "Te propongo un KPI 'Cantidad'. ¿Te sirve así?"
+
+
+def test_historial_con_rol_invalido_es_422(cliente, workspace_listo):
+    respuesta = cliente.post(_ruta(workspace_listo), json={"mensaje": "hola", "historial": [{"rol": "bot", "texto": "x"}]})
+    assert respuesta.status_code == 422
+
+
 def test_sin_modelo_cargado_es_e_mod_02(cliente, datos, ingresar):
     ingresar("constructor@beta.test")
     respuesta = cliente.post(_ruta(datos.beta_workspace_id), json={"mensaje": "hola"})

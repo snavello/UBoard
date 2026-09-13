@@ -32,6 +32,11 @@ registro = logging.getLogger("uboard.asistente")
 
 MAX_VUELTAS = 4
 MAX_TOKENS_RESPUESTA = 2048
+# Turnos previos de esta conversacion que se le mandan a Claude (memoria
+# corta, sin persistir nada): alcanza para que una confirmacion corta
+# ("sí, dale") tenga con que reconstruirse, sin que el pedido crezca sin
+# limite a medida que se alarga el chat.
+MAX_TURNOS_HISTORIAL = 6
 
 SISTEMA = """Sos el asistente de UBoard, un BI para pymes argentinas. Hablás en español
 rioplatense, corto y directo. Según quién te pregunta tenés dos usos:
@@ -63,7 +68,11 @@ Reglas para las dos situaciones:
   otra forma, filtrá con el operador "contiene" en vez de "igual", así encontrás
   coincidencias aunque no tengas el valor exacto. Si "contiene" no encuentra nada, ahí sí
   preguntá por el dato exacto en vez de asumir que no hay resultados.
-- Respuestas cortas. Al terminar una acción, contá en una frase qué quedó hecho."""
+- Respuestas cortas. Al terminar una acción, contá en una frase qué quedó hecho.
+- Si en el mensaje anterior propusiste algo (un gráfico, una métrica, una aclaración) y
+  la persona contesta con una confirmación corta ("sí", "dale", "sí sirve", "andá"),
+  aplicá exactamente lo que propusiste: no le preguntes "a qué te referís", ya lo tenés
+  en la conversación de arriba."""
 
 
 @dataclass
@@ -144,12 +153,26 @@ def conversar(
     mensaje: str,
     contexto: str,
     filtros_activos: list[FiltroConsulta] | None = None,
+    historial: list[dict[str, str]] | None = None,
 ) -> RespuestaAsistente:
     """Un pedido de punta a punta: arma el catalogo de herramientas segun el
     rol, corre el loop de tool-use (tope de MAX_VUELTAS) y devuelve el texto
-    final mas las acciones que aplico en el camino."""
+    final mas las acciones que aplico en el camino.
+
+    `historial` (memoria corta, sin persistir nada en la base) son los
+    turnos previos de ESTA conversacion tal como los guarda el frontend
+    (`[{"rol": "usuario"|"asistente", "texto": "..."}]`); solo se usan los
+    ultimos `MAX_TURNOS_HISTORIAL` para no inflar el pedido sin limite. Sin
+    esto, una confirmacion corta como "sí, dale" a algo que Claude propuso
+    en el mensaje anterior no tiene con que reconstruirse: cada pedido
+    llegaba sin memoria de los anteriores (decision original de la fase 3)
+    y Claude terminaba preguntando "¿a qué te referís?"."""
     catalogo = catalogo_para_rol(usuario.rol, sesion=sesion, workspace=workspace, almacen=almacen, usuario=usuario, filtros_base=filtros_activos)
-    mensajes: list[dict[str, Any]] = [{"role": "user", "content": f"Contexto actual: {contexto}\n\nPedido: {mensaje}"}]
+    mensajes: list[dict[str, Any]] = [
+        {"role": "user" if turno["rol"] == "usuario" else "assistant", "content": turno["texto"]}
+        for turno in (historial or [])[-MAX_TURNOS_HISTORIAL:]
+    ]
+    mensajes.append({"role": "user", "content": f"Contexto actual: {contexto}\n\nPedido: {mensaje}"})
     acciones: list[AccionAplicada] = []
     tokens_entrada = tokens_salida = 0
 

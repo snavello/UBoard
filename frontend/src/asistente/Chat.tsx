@@ -5,9 +5,11 @@
    `variante="inline"` es el cuadro de preguntas del Tablero, para
    constructor y visualizador, siempre visible cerca de los filtros y que
    les manda como `filtros` (paso 21) para que la respuesta los respete.
-   En los dos casos cada pedido es independiente: el backend no persiste la
-   conversacion (decidido en la fase 3), asi que el historial que se ve
-   aca vive solo en el estado de esta pantalla y se pierde al refrescar. */
+   Nada de esto se persiste en el backend: el historial que se ve aca vive
+   solo en el estado de esta pantalla y se pierde al refrescar, pero desde
+   la fase 4 se le manda al backend como memoria corta de la conversacion
+   (`historial`) para que una confirmacion corta ("sí, dale") a algo que el
+   asistente propuso en el mensaje anterior tenga con que reconstruirse. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -45,10 +47,17 @@ function enlaceDe(herramienta: string): { to: string; texto: string } | null {
 
 interface MensajeChat {
   id: number;
-  rol: "usuario" | "asistente" | "error";
+  rol: "usuario" | "asistente" | "error" | "sistema";
   texto: string;
   acciones?: AccionAsistente[];
 }
+
+// Silencio (sin nuevo resultado de dictado) antes de mandar la pregunta sola.
+const SILENCIO_PARA_AUTOENVIAR_MS = 4000;
+// Turnos previos que se le mandan al backend como memoria corta (recorta
+// igual del lado del servidor; esto es nomas para no mandar un historial
+// larguisimo de una conversacion extensa).
+const MAX_TURNOS_HISTORIAL = 6;
 
 interface Props {
   variante?: "flotante" | "inline";
@@ -67,20 +76,42 @@ export function Chat({ variante = "flotante", filtrosActivos, onAplicarFiltro }:
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState("");
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
+  const mensajesRef = useRef<MensajeChat[]>([]);
   const proximoId = useRef(0);
   const finRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    mensajesRef.current = mensajes;
+  }, [mensajes]);
 
   const agregarMensaje = (mensaje: Omit<MensajeChat, "id">) => {
     proximoId.current += 1;
     setMensajes((previos) => [...previos, { ...mensaje, id: proximoId.current }]);
   };
 
+  const abortadorRef = useRef<AbortController | null>(null);
+
   const enviar = useMutation({
-    mutationFn: (mensaje: string) =>
-      pedir<RespuestaAsistente>(rutaWorkspace(workspaceId, "/asistente/mensajes"), {
+    mutationFn: (mensaje: string) => {
+      // Via mensajesRef (no el estado "mensajes" directo) para no quedar con
+      // un historial viejo si esto se llama desde un closure mas antiguo
+      // (el auto-envio por voz dispara despues de un timer).
+      const historial = mensajesRef.current
+        .filter((previo): previo is MensajeChat & { rol: "usuario" | "asistente" } => previo.rol === "usuario" || previo.rol === "asistente")
+        .slice(-MAX_TURNOS_HISTORIAL)
+        .map((previo) => ({ rol: previo.rol, texto: previo.texto }));
+      const abortador = new AbortController();
+      abortadorRef.current = abortador;
+      return pedir<RespuestaAsistente>(rutaWorkspace(workspaceId, "/asistente/mensajes"), {
         method: "POST",
-        json: filtrosActivos && Object.keys(filtrosActivos).length > 0 ? { mensaje, filtros: filtrosActivos } : { mensaje },
-      }),
+        signal: abortador.signal,
+        json: {
+          mensaje,
+          ...(historial.length > 0 && { historial }),
+          ...(filtrosActivos && Object.keys(filtrosActivos).length > 0 && { filtros: filtrosActivos }),
+        },
+      });
+    },
     onSuccess: (respuesta) => {
       agregarMensaje({ rol: "asistente", texto: respuesta.texto, acciones: respuesta.acciones });
       const artefactosTocados = respuesta.acciones.filter((accion) => accion.herramienta !== "aplicar_filtro");
@@ -96,31 +127,75 @@ export function Chat({ variante = "flotante", filtrosActivos, onAplicarFiltro }:
         }
       }
     },
-    onError: (error) => agregarMensaje({ rol: "error", texto: mensajeDeError(error) }),
+    onError: (error) => {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        agregarMensaje({ rol: "sistema", texto: "Cancelado." });
+        return;
+      }
+      agregarMensaje({ rol: "error", texto: mensajeDeError(error) });
+    },
   });
 
+  const cancelarPedido = () => abortadorRef.current?.abort();
+
+  const enviarTexto = (valor: string) => {
+    const limpio = valor.trim();
+    if (!limpio || enviar.isPending) return;
+    agregarMensaje({ rol: "usuario", texto: limpio });
+    setTexto("");
+    enviar.mutate(limpio);
+  };
+
   // Dictado por voz (Web Speech API): sin backend, solo llena el campo de
-  // texto, la persona revisa y envia como siempre. Sin soporte del
-  // navegador (Firefox, Safari en iOS), el boton de microfono no aparece.
+  // texto. Sin soporte del navegador (Firefox, Safari en iOS), el boton de
+  // microfono no aparece. `continuous: true` para que no corte solo en una
+  // pausa corta; el auto-envio despues de un silencio lo maneja este
+  // componente con su propio timer, no la deteccion del navegador.
   const ConstructorVoz = useMemo(() => obtenerConstructorDeVoz(), []);
   const [escuchando, setEscuchando] = useState(false);
   const reconocimientoRef = useRef<ReconocimientoVoz | null>(null);
+  const silencioRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => reconocimientoRef.current?.stop(), []);
+  const limpiarTimerDeSilencio = () => {
+    if (silencioRef.current !== null) {
+      clearTimeout(silencioRef.current);
+      silencioRef.current = null;
+    }
+  };
+
+  const detenerDictado = ({ conservarTexto }: { conservarTexto: boolean }) => {
+    limpiarTimerDeSilencio();
+    reconocimientoRef.current?.stop();
+    reconocimientoRef.current = null;
+    setEscuchando(false);
+    if (!conservarTexto) setTexto("");
+  };
+
+  useEffect(() => () => detenerDictado({ conservarTexto: true }), []);
 
   const alternarMicrofono = () => {
     if (escuchando) {
-      reconocimientoRef.current?.stop();
-      setEscuchando(false);
+      // El boton "Stop": corta el dictado y borra lo transcripto, porque si
+      // la persona lo apreta a mano durante el dictado es porque algo salio
+      // mal (si iba bien, el silencio lo manda solo).
+      detenerDictado({ conservarTexto: false });
       return;
     }
     if (!ConstructorVoz) return;
     const reconocimiento = new ConstructorVoz();
     reconocimiento.lang = "es-AR";
     reconocimiento.interimResults = true;
-    reconocimiento.continuous = false;
-    reconocimiento.onresult = (evento) => setTexto(transcriptoDe(evento));
-    reconocimiento.onerror = () => setEscuchando(false);
+    reconocimiento.continuous = true;
+    reconocimiento.onresult = (evento) => {
+      const nuevoTexto = transcriptoDe(evento);
+      setTexto(nuevoTexto);
+      limpiarTimerDeSilencio();
+      silencioRef.current = setTimeout(() => {
+        detenerDictado({ conservarTexto: true });
+        enviarTexto(nuevoTexto);
+      }, SILENCIO_PARA_AUTOENVIAR_MS);
+    };
+    reconocimiento.onerror = () => detenerDictado({ conservarTexto: true });
     reconocimiento.onend = () => setEscuchando(false);
     reconocimientoRef.current = reconocimiento;
     reconocimiento.start();
@@ -135,11 +210,7 @@ export function Chat({ variante = "flotante", filtrosActivos, onAplicarFiltro }:
 
   const enviarMensaje = (evento: React.FormEvent) => {
     evento.preventDefault();
-    const valor = texto.trim();
-    if (!valor || enviar.isPending) return;
-    agregarMensaje({ rol: "usuario", texto: valor });
-    setTexto("");
-    enviar.mutate(valor);
+    enviarTexto(texto);
   };
 
   const vacio = esVisualizador
@@ -194,15 +265,21 @@ export function Chat({ variante = "flotante", filtrosActivos, onAplicarFiltro }:
             onClick={alternarMicrofono}
             disabled={enviar.isPending}
             aria-pressed={escuchando}
-            aria-label={escuchando ? "Detener el dictado por voz" : "Preguntar por voz"}
-            title={escuchando ? "Detener el dictado" : "Preguntar por voz"}
+            aria-label={escuchando ? "Cancelar el dictado y borrar el texto" : "Preguntar por voz"}
+            title={escuchando ? "Cancelar el dictado y borrar el texto" : "Preguntar por voz"}
           >
-            🎤
+            {escuchando ? "⏹" : "🎤"}
           </button>
         )}
-        <button type="submit" className="boton boton--primario boton--chico" disabled={enviar.isPending || !texto.trim()}>
-          {esVisualizador || variante === "inline" ? "Preguntar" : "Enviar"}
-        </button>
+        {enviar.isPending ? (
+          <button type="button" className="boton boton--peligro boton--chico" onClick={cancelarPedido}>
+            Cancelar
+          </button>
+        ) : (
+          <button type="submit" className="boton boton--primario boton--chico" disabled={!texto.trim()}>
+            {esVisualizador || variante === "inline" ? "Preguntar" : "Enviar"}
+          </button>
+        )}
       </form>
     </>
   );
@@ -218,12 +295,17 @@ export function Chat({ variante = "flotante", filtrosActivos, onAplicarFiltro }:
   return (
     <>
       <button type="button" className={estilos.botonFlotante} onClick={() => setAbierto((valor) => !valor)} aria-expanded={abierto}>
-        {abierto ? "✕ Cerrar" : "💬 Asistente"}
+        💬 Asistente
       </button>
       {abierto && (
         <aside className={estilos.panel} aria-label="Asistente de UBoard">
           <header className={estilos.cabecera}>
-            <strong>Asistente</strong>
+            <div className={estilos.cabeceraFila}>
+              <strong>Asistente</strong>
+              <button type="button" className={estilos.botonCerrar} onClick={() => setAbierto(false)} aria-label="Cerrar el asistente">
+                ✕
+              </button>
+            </div>
             <span className="mudo">Pedile cambios en lenguaje natural</span>
           </header>
           {contenido}
