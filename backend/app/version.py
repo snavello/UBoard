@@ -5,5 +5,5 @@ nueva, +1 al minor y el patch vuelve a 01. FECHA_VERSION es la hora real del
 commit (tomar de `date "+%Y-%m-%d %H:%M"`), nunca inventada.
 """
 
-VERSION = "0.24.01"
-FECHA_VERSION = "2026-09-12 21:11"
+VERSION = "0.25.01"
+FECHA_VERSION = "2026-09-12 23:04"

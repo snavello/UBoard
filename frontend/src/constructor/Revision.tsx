@@ -20,6 +20,7 @@ import type {
   Granularidad,
   MetricaModelo,
   ModeloSemantico,
+  Operador,
   Operando,
   OperacionFormula,
   RelacionModelo,
@@ -94,8 +95,23 @@ function resumenOperando(operando: Operando): string {
   return `(${resumenOperando(operando.izquierda)} ${SIMBOLO_OPERACION_FORMULA[operando.operacion]} ${resumenOperando(operando.derecha)})`;
 }
 
+const SIMBOLO_OPERADOR: Partial<Record<Operador, string>> = {
+  igual: "=",
+  distinto: "≠",
+  mayor: ">",
+  mayor_igual: "≥",
+  menor: "<",
+  menor_igual: "≤",
+  contiene: "contiene",
+};
+
 function resumenExpresion(metrica: MetricaModelo): string {
-  if (esExpresionAgregacion(metrica.expresion)) return `${metrica.expresion.agregacion}(${metrica.expresion.campo})`;
+  if (esExpresionAgregacion(metrica.expresion)) {
+    const base = `${metrica.expresion.agregacion}(${metrica.expresion.campo})`;
+    const filtro = metrica.expresion.filtros?.[0];
+    if (!filtro) return base;
+    return `${base} donde ${filtro.campo} ${SIMBOLO_OPERADOR[filtro.operador] ?? filtro.operador} ${String(filtro.valor)}`;
+  }
   if (esExpresionCociente(metrica.expresion)) return `${metrica.expresion.numerador} / ${metrica.expresion.denominador}`;
   return `${resumenOperando(metrica.expresion.izquierda)} ${SIMBOLO_OPERACION_FORMULA[metrica.expresion.operacion]} ${resumenOperando(metrica.expresion.derecha)}`;
 }
@@ -497,14 +513,32 @@ function SeccionRelaciones({ modelo, aplicar, pendiente }: { modelo: ModeloSeman
   );
 }
 
+// Los operadores simples que admite el control de filtro del wizard (un
+// valor escalar). "en", "entre", "es_nulo" y "no_es_nulo" necesitan otra
+// forma de valor; para esos casos queda el chat o "Avanzado".
+const OPERADORES_SIMPLES: { valor: Operador; etiqueta: string }[] = [
+  { valor: "igual", etiqueta: "es igual a" },
+  { valor: "distinto", etiqueta: "es distinto de" },
+  { valor: "mayor", etiqueta: "es mayor que" },
+  { valor: "mayor_igual", etiqueta: "es mayor o igual que" },
+  { valor: "menor", etiqueta: "es menor que" },
+  { valor: "menor_igual", etiqueta: "es menor o igual que" },
+  { valor: "contiene", etiqueta: "contiene" },
+];
+
 function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemantico; aplicar: Aplicar; pendiente: boolean }) {
-  const campos = todosLosCampos(modelo).filter((campo) => campo.tipoDato === "entero" || campo.tipoDato === "decimal");
+  const todosCampos = todosLosCampos(modelo);
+  const campos = todosCampos.filter((campo) => campo.tipoDato === "entero" || campo.tipoDato === "decimal");
   const hayPropuestas = modelo.metricas.some((metrica) => metrica.estado === "propuesta");
   const [id, setId] = useState("");
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState<"agregacion" | "cociente" | "formula">("agregacion");
   const [agregacion, setAgregacion] = useState<Agregacion>("suma");
   const [campo, setCampo] = useState("");
+  const [conFiltro, setConFiltro] = useState(false);
+  const [filtroCampo, setFiltroCampo] = useState("");
+  const [filtroOperador, setFiltroOperador] = useState<Operador>("igual");
+  const [filtroValor, setFiltroValor] = useState("");
   const [numerador, setNumerador] = useState("");
   const [denominador, setDenominador] = useState("");
   const [operacionFormula, setOperacionFormula] = useState<OperacionFormula>("resta");
@@ -522,6 +556,9 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
     let expresion: ExpresionMetrica;
     if (tipo === "agregacion") {
       expresion = { agregacion, campo };
+      if (conFiltro && filtroCampo && filtroValor.trim()) {
+        expresion.filtros = [{ campo: filtroCampo, operador: filtroOperador, valor: filtroValor.trim() }];
+      }
     } else if (tipo === "cociente") {
       expresion = { numerador, denominador };
     } else {
@@ -532,6 +569,9 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
     void aplicar({ operacion: "crear_metrica", id: id.trim(), nombre: nombre.trim(), expresion, formato }).then(() => {
       setId("");
       setNombre("");
+      setConFiltro(false);
+      setFiltroCampo("");
+      setFiltroValor("");
     });
   };
 
@@ -622,6 +662,30 @@ function SeccionMetricas({ modelo, aplicar, pendiente }: { modelo: ModeloSemanti
                   </option>
                 ))}
               </select>
+              <label className={estilos.checkbox}>
+                <input type="checkbox" checked={conFiltro} onChange={(e) => setConFiltro(e.target.checked)} />
+                Con filtro
+              </label>
+              {conFiltro && (
+                <>
+                  <select className="campo" value={filtroCampo} onChange={(e) => setFiltroCampo(e.target.value)} required>
+                    <option value="">Filtrar por…</option>
+                    {todosCampos.map((c) => (
+                      <option key={c.referencia} value={c.referencia}>
+                        {c.etiqueta}
+                      </option>
+                    ))}
+                  </select>
+                  <select className="campo" value={filtroOperador} onChange={(e) => setFiltroOperador(e.target.value as Operador)}>
+                    {OPERADORES_SIMPLES.map((o) => (
+                      <option key={o.valor} value={o.valor}>
+                        {o.etiqueta}
+                      </option>
+                    ))}
+                  </select>
+                  <input className="campo" placeholder="Valor" value={filtroValor} onChange={(e) => setFiltroValor(e.target.value)} required />
+                </>
+              )}
             </>
           ) : tipo === "cociente" ? (
             <>

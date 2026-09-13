@@ -150,6 +150,19 @@ def test_metricas(modelo):
     assert metrica.origen == "usuario" and metrica.estado == "confirmada" and metrica.formato == "moneda"
     assert validar_estructura(nuevo) == []
 
+    nuevo_con_filtro, resumen = aplicar(
+        nuevo,
+        operacion="crear_metrica",
+        id="cobrado_efectivo",
+        nombre="Cobrado en efectivo",
+        expresion={"agregacion": "suma", "campo": "pagos.monto", "filtros": [{"campo": "medios_pago.nombre", "valor": "Efectivo"}]},
+        formato="moneda",
+    )
+    filtro = nuevo_con_filtro.metrica("cobrado_efectivo").expresion.filtros[0]
+    assert filtro.campo == "medios_pago.nombre" and filtro.valor == "Efectivo"
+    assert validar_estructura(nuevo_con_filtro) == []
+    assert "cobrado_efectivo" in resumen
+
     nuevo, _ = aplicar(nuevo, operacion="editar_metrica", metrica="descuento_promedio", nombre="Precio medio", formato="decimal")
     assert nuevo.metrica("descuento_promedio").nombre == "Precio medio" and nuevo.metrica("descuento_promedio").formato == "decimal"
     assert nuevo.metrica("descuento_promedio").expresion.agregacion == "promedio", "lo no enviado no cambia"

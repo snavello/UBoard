@@ -186,9 +186,20 @@ export interface RelacionModelo {
   propagar: boolean;
 }
 
+export type Operador = "igual" | "distinto" | "en" | "entre" | "mayor" | "mayor_igual" | "menor" | "menor_igual" | "contiene" | "es_nulo" | "no_es_nulo";
+
+export interface CondicionFiltro {
+  campo: string;
+  operador: Operador;
+  valor: unknown;
+}
+
 export interface ExpresionAgregacion {
   agregacion: Agregacion;
   campo: string;
+  // Filtro propio de la metrica (paso "metricas filtradas"): se aplica
+  // siempre que se usa esta metrica, no depende de los filtros del dashboard.
+  filtros?: CondicionFiltro[];
 }
 
 export interface ExpresionCociente {

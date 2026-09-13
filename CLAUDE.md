@@ -546,6 +546,49 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     layout (17 en total); sin tests de backend (no se tocó). Verificado
     en Docker y en modo oscuro con el modelo real de una organización de
     prueba.
+  - Métricas con un filtro propio: HECHO 2026-09-12 (v0.25.01). Pedido de
+    Sd junto con el paso A ("quiero poder crear... 'ventas en efectivo'");
+    resuelto con la opción más potente de las dos que se le preguntaron
+    (soportar también el lado "muchos" del camino, no solo el seguro).
+    `ExpresionAgregacion` gana `filtros: list[FiltroConsulta]`: una
+    condición que se aplica siempre que se usa esa métrica, en cualquier
+    consulta, no depende de los filtros del dashboard. `Operador` y
+    `FiltroConsulta` se mudaron de `consultas/esquema.py` a
+    `modelo/esquema.py` (una métrica del modelo ahora necesita
+    embeber un filtro; `consultas/esquema.py` ya dependía de
+    `modelo/esquema.py`, así que al revés hubiera sido un import
+    circular) — `consultas/esquema.py` los reexporta, ningún llamador
+    externo cambió. `consultas/compilador.py`: `_columna_agregacion`
+    calcula, por cada filtro propio de la métrica, el camino hasta su
+    entidad; si es seguro lo resuelve con JOIN (como una dimensión más),
+    si pasa por el lado "muchos" lo resuelve con EXISTS (reusa el mismo
+    mecanismo de semi-join del paso 5); la columna agregada queda envuelta
+    en `CASE WHEN <condición> THEN columna ELSE NULL END`, lo que funciona
+    para SUM/COUNT/AVG/MIN/MAX por igual porque todas ignoran NULL. Ojo
+    con el orden de los parámetros `?`: los del filtro de la métrica (en
+    el SELECT) van ANTES que los del WHERE de la consulta, porque DuckDB
+    los une posicionalmente en el orden del SQL final. `modelo/
+    validacion.py` solo chequea que el campo del filtro exista (la
+    seguridad del camino la decide el compilador, no esta capa, mismo
+    reparto de responsabilidades que el resto del archivo). El wizard
+    (`constructor/Revision.tsx`, sección Métricas) gana un checkbox "Con
+    filtro" que agrega los tres controles (campo, operador, valor) al
+    crear una métrica de agregación, y `resumenExpresion` muestra el
+    filtro en la columna Expresión (`suma(ventas.importe) donde
+    medios_pago.nombre = Efectivo`). El chat no necesitó ningún cambio:
+    el esquema de la herramienta `crear_metrica` sale en vivo de
+    `ExpresionAgregacion.model_json_schema()`, así que Claude ya podía
+    armar el `filtros` en cuanto el modelo lo soportó. 8 tests nuevos de
+    compilador + 2 de validación + 1 de edición (355 en total). Probado
+    de punta a punta en Docker con una organización descartable: se creó
+    "Ventas en efectivo" (`suma(ventas.importe)` filtrado por
+    `medios_pago.nombre = Efectivo`, un camino inseguro que resolvió con
+    EXISTS) desde el wizard, y en el mismo chat se probó el pedido
+    textual de Sd ("quiero agregar un grafico de torta ventas en efectivo
+    por vendedor"): el asistente creó el gráfico usando esa métrica sin
+    pedir nada más, con números correctos y el filtro de vendedor nulo
+    incluido (LEFT JOIN, como corresponde). Organización de prueba
+    borrada al terminar.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -858,6 +901,13 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   numérica o, embebida, otra `ExpresionFormula`; se valida sin ciclos
   (mismo mecanismo de `vistos` que corta la auto-referencia del cociente,
   generalizado a recorrer el árbol) y sin referenciar cocientes.
+- **Filtro propio de una métrica** (`ExpresionAgregacion.filtros`, desde
+  fase 4): condiciones (`FiltroConsulta`, movido acá desde
+  `consultas/esquema.py` para evitar un import circular — ese módulo lo
+  reexporta) que se aplican siempre que se usa esa métrica, en cualquier
+  consulta; no son un filtro del dashboard. Esta capa solo valida que el
+  campo exista; si el camino hasta él es seguro o del lado "muchos" lo
+  decide el compilador (§ Reglas del compilador).
 
 ## Reglas del compilador (vigentes desde el paso 5)
 - **Nadie escribe SQL fuera de `consultas/compilador.py`.** KPIs, gráficos,
@@ -891,6 +941,14 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   esa granularidad (`E-CONS-05`); sale como DATE del primer día del período.
 - Alias de dimensión por defecto = `"entidad.campo"`; orden por defecto =
   dimensiones ascendentes, `NULLS LAST`.
+- **Filtro propio de una métrica** (`ExpresionAgregacion.filtros`, desde
+  fase 4): se resuelve en `_columna_agregacion`, igual que una dimensión o
+  un filtro de consulta según el camino sea seguro (JOIN) o del lado
+  "muchos" (EXISTS) — mismas dos rutas de siempre, no una tercera. La
+  columna agregada queda `CASE WHEN <condición> THEN columna ELSE NULL
+  END`, así que sirve igual para las seis agregaciones (todas ignoran
+  NULL). Sus parámetros `?` van ANTES que los del WHERE de la consulta:
+  aparecen primero en el SQL final y DuckDB liga por posición.
 
 ## Reglas del dashboard (vigentes desde el paso 6)
 - **El spec se valida compilando cada panel** contra el modelo efectivo con

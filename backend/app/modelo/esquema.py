@@ -99,9 +99,44 @@ class Relacion(_Base):
     propagar: bool = True
 
 
+Operador = Literal[
+    "igual",
+    "distinto",
+    "en",
+    "entre",
+    "mayor",
+    "mayor_igual",
+    "menor",
+    "menor_igual",
+    "contiene",
+    "es_nulo",
+    "no_es_nulo",
+]
+
+
+class FiltroConsulta(_Base):
+    """Una condicion sobre un campo: la misma forma para filtrar una
+    consulta entera (`consultas/esquema.py`, re-exportado desde aca) y para
+    filtrar una sola metrica (`ExpresionAgregacion.filtros`, § metricas
+    filtradas). Vive en el modelo porque una metrica la lleva adentro."""
+
+    campo: RefCampo
+    operador: Operador = "igual"
+    # escalar para igual/distinto/mayor/...; lista para `en`; [desde, hasta] para
+    # `entre` (cualquiera de los dos puede ser null = abierto); nada para es_nulo
+    valor: Any = None
+
+
 class ExpresionAgregacion(_Base):
     agregacion: Agregacion
     campo: RefCampo
+    # Filtro propio de la metrica (ej. "ventas en efectivo" = suma de
+    # pagos.monto con medios_pago.nombre = 'Efectivo'), no del dashboard: se
+    # aplica siempre que se usa esta metrica, en cualquier consulta. El
+    # camino desde `campo` hasta cada `filtros[].campo` puede ser seguro
+    # (se resuelve con JOIN) o del lado "muchos" (se resuelve con EXISTS);
+    # ver `consultas/compilador.py`.
+    filtros: list[FiltroConsulta] = Field(default_factory=list)
 
 
 class ExpresionCociente(_Base):

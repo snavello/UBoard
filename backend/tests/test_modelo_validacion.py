@@ -210,6 +210,16 @@ def test_conteo_y_minimo_aceptan_cualquier_tipo_razonable(modelo):
     assert _errores(modelo) == []
 
 
+def test_metrica_con_filtro_propio_valido(modelo):
+    _metrica(modelo, "total_pagado")["expresion"]["filtros"] = [{"campo": "medios_pago.nombre", "valor": "Efectivo"}]
+    assert _errores(modelo) == []
+
+
+def test_metrica_con_filtro_sobre_campo_inexistente(modelo):
+    _metrica(modelo, "total_pagado")["expresion"]["filtros"] = [{"campo": "pagos.no_existe", "valor": "x"}]
+    assert _errores(modelo) == [validacion.MET_FILTRO]
+
+
 def test_cociente_invalido(modelo):
     ticket = _metrica(modelo, "ticket_promedio")
     ticket["expresion"] = {"numerador": "ticket_promedio", "denominador": "no_existe"}

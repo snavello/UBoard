@@ -1302,3 +1302,96 @@ dibujo en sí (`Diagrama.tsx`) no tiene tests, es una traducción directa de
 coordenadas a SVG, sin lógica propia; se verificó a mano en el navegador,
 en claro y oscuro, contra el modelo real de una organización de prueba
 (borrada al terminar). Sin cambios de backend, sin tests nuevos ahí.
+
+## 2026-09-12 — Métricas con un filtro propio (v0.25.01)
+
+El mismo pedido de "quiero poder crear filtros con los asistentes y crear
+gráficos también, ej. 'quiero agregar un gráfico de torta ventas en
+efectivo por vendedor', hoy no se puede" traía adentro dos problemas
+distintos: filtrar y graficar por chat (paso A, ya resuelto) y una pieza
+que faltaba en el modelo mismo — "ventas en efectivo" no existía como
+métrica, porque el medio de pago vive en `medios_pago`, tres saltos de
+`ventas`, y ninguna métrica del modelo se sabía filtrar así.
+
+Antes de tocar código se le preguntó a Sd por dos decisiones reales con
+`AskUserQuestion`. La primera, cuánto alcance darle al filtro de una
+métrica: la opción chica solo soporta caminos "seguros" (JOIN, como una
+dimensión más); la potente soporta también caminos del lado "muchos"
+(EXISTS). Sd eligió la potente — es justo el caso de "ventas en
+efectivo", porque `ventas` → `pagos` es 1:n, un camino inseguro. La
+segunda, si el wizard necesitaba un control para armar el filtro a mano o
+alcanzaba con que lo arme el chat: eligió las dos cosas juntas, mismo
+criterio que ya se usó en el paso 18 (fórmulas). Una tercera pregunta, ya
+sobre el otro pendiente de la sesión (el estado gris tipo Qlik), quedó
+resuelta para más adelante: empezar por la versión chica (opciones de
+filtro), no por la versión completa (gráficos en gris).
+
+**El modelo.** `ExpresionAgregacion` gana `filtros: list[FiltroConsulta]`
+— una condición que viaja pegada a la métrica y se aplica siempre que se
+la usa, en cualquier consulta, distinto de un filtro del dashboard (que
+es de la persona que mira, no de la métrica). Para poder embeber un
+`FiltroConsulta` adentro de una métrica del modelo hubo que resolver un
+problema de dependencias: `FiltroConsulta` y `Operador` vivían en
+`consultas/esquema.py`, que ya importa cosas de `modelo/esquema.py` — si
+`modelo/esquema.py` los hubiera importado de vuelta, ciclo. Se mudaron
+los dos a `modelo/esquema.py` (tiene más sentido ahí de todos modos: un
+filtro de métrica es parte del modelo, no de una consulta puntual) y
+`consultas/esquema.py` quedó reexportándolos, así que ningún llamador
+externo — y son bastantes — tuvo que cambiar una línea. Se verificó a
+mano que no había ciclo (ejecutando el import directo) y con la suite
+completa en verde.
+
+**El compilador.** Es la pieza más delicada. `_columna_agregacion` mira,
+para cada filtro propio de una métrica, el camino desde la entidad de la
+métrica hasta la entidad del filtro — el mismo `_camino` que ya usa el
+compilador desde el paso 5 para dimensiones y filtros de consulta. Si el
+camino es seguro, lo resuelve con JOIN, igual que una dimensión más. Si
+en algún punto el camino pasa por el lado "muchos", resuelve esa parte
+con EXISTS — reusando el semi-join que ya existía para "ventas que
+tienen algún pago en efectivo" (paso 5), no una pieza nueva. La columna
+agregada queda envuelta en `CASE WHEN <condición> THEN columna ELSE NULL
+END`: como las seis agregaciones (`suma`, `conteo`, `conteo_distinto`,
+`promedio`, `minimo`, `maximo`) ignoran NULL, el mismo truco sirve para
+todas sin un caso especial por agregación.
+
+Se encontró y resolvió una sutileza de posiciones antes de correr el
+primer test: los parámetros `?` del filtro de la métrica están en el
+SELECT, los del filtro del dashboard están en el WHERE, y DuckDB liga los
+parámetros posicionalmente según el orden en que aparecen en el SQL
+final — así que había que juntar primero los parámetros de las columnas
+agregadas y recién después los del WHERE, no al revés. Los cuatro tests
+nuevos de compilador lo confirmaron a la primera.
+
+**El wizard y el chat.** El wizard (`constructor/Revision.tsx`, sección
+Métricas) suma un checkbox "Con filtro" a "Crear una métrica": tildado,
+aparecen los tres controles (campo — cualquier campo del modelo, no solo
+los numéricos que ya se ofrecían para la métrica en sí —, operador y
+valor). La tabla de métricas ahora muestra el filtro en la columna
+Expresión (`suma(ventas.importe) donde medios_pago.nombre = Efectivo`).
+El chat no necesitó una sola línea de cambio para poder crear métricas
+filtradas: el esquema de la herramienta `crear_metrica` que ve Claude
+sale en vivo de `ExpresionAgregacion.model_json_schema()`, así que en
+cuanto el modelo Pydantic tuvo el campo `filtros`, Claude ya lo podía
+usar — se confirmó pidiéndole en la práctica el ejemplo textual de Sd.
+
+**Verificación de punta a punta.** Con una organización descartable
+(datos de prueba de siempre, cargados vía `cargar_prueba.py`) se probaron
+los dos caminos por separado: desde el wizard se creó "Ventas en
+efectivo" (`suma(ventas.importe)` filtrado por `medios_pago.nombre =
+Efectivo`, el camino inseguro que resuelve con EXISTS) y quedó confirmada
+al toque por ser de origen `usuario`; en el mismo chat, sin decirle nada
+de la métrica recién creada, se le pidió literalmente "quiero agregar un
+grafico de torta ventas en efectivo por vendedor" — contestó que lo
+había agregado, usó la métrica `ventas_efectivo` con la dimensión
+`vendedores.nombre`, y el gráfico apareció en el tablero con números
+correctos (se verificaron contra la API del gráfico: la suma en efectivo
+por cada vendedor, con el grupo de vendedor nulo incluido por el LEFT
+JOIN, como corresponde). Organización de prueba borrada por SQL crudo al
+terminar, según la regla de siempre (el cascade del ORM choca con un
+check constraint).
+
+8 tests nuevos de compilador + 2 de validación de modelo + 1 de edición
+(la creación de una métrica filtrada por la operación granular
+`crear_metrica`) — 355 tests de backend en total. Frontend: build y
+`vitest` en verde, sin tests nuevos de componente (mismo criterio que el
+resto del wizard desde el paso 13, se verifica a mano en el navegador).

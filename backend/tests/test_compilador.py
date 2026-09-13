@@ -69,6 +69,95 @@ def test_kpis_de_varias_entidades_y_cociente_en_una_consulta(conexion, modelo):
     assert tipos == {"total_ventas": "decimal", "cantidad_ventas": "entero", "ticket_promedio": "decimal", "total_pagado": "decimal", "cantidad_pagos": "entero"}
 
 
+def test_metrica_con_filtro_propio_camino_seguro(conexion):
+    """"Cobrado en efectivo": suma de pagos.monto filtrada por
+    medios_pago.nombre, alcanzable con un JOIN normal (pagos es el lado
+    "muchos" de la relacion con medios_pago, un JOIN no multiplica nada
+    porque la agregacion ya viene de pagos)."""
+    contenido = copy.deepcopy(MODELO_JSON)
+    contenido["metricas"].append(
+        {
+            "id": "cobrado_efectivo",
+            "nombre": "Cobrado en efectivo",
+            "expresion": {"agregacion": "suma", "campo": "pagos.monto", "filtros": [{"campo": "medios_pago.nombre", "valor": "Efectivo"}]},
+            "formato": "moneda",
+        }
+    )
+    modelo_filtrado = modelo_efectivo(parsear_modelo(contenido))
+    resultado = _correr(conexion, modelo_filtrado, {"metricas": ["cobrado_efectivo"]})
+    esperado = _sql(
+        conexion, "SELECT sum(p.monto) FROM pagos p JOIN medios_pago m ON p.id_medio_pago = m.id_medio_pago WHERE m.nombre = 'Efectivo'"
+    )[0][0]
+    assert _cerca(resultado.filas[0][0], esperado) and esperado > 0
+
+
+def test_metrica_con_filtro_propio_camino_inseguro_usa_exists(conexion):
+    """"Ventas con algun pago en efectivo": suma de ventas.importe filtrada
+    por un campo alcanzable solo del lado "muchos" (una venta puede tener
+    varios pagos) — tiene que resolverse con EXISTS, no con JOIN."""
+    contenido = copy.deepcopy(MODELO_JSON)
+    contenido["metricas"].append(
+        {
+            "id": "ventas_con_efectivo",
+            "nombre": "Ventas con pago en efectivo",
+            "expresion": {"agregacion": "suma", "campo": "ventas.importe", "filtros": [{"campo": "medios_pago.nombre", "valor": "Efectivo"}]},
+            "formato": "moneda",
+        }
+    )
+    modelo_filtrado = modelo_efectivo(parsear_modelo(contenido))
+    resultado = _correr(conexion, modelo_filtrado, {"metricas": ["ventas_con_efectivo"]})
+    esperado = _sql(
+        conexion,
+        """SELECT sum(v.importe) FROM ventas v WHERE EXISTS (
+             SELECT 1 FROM pagos p JOIN medios_pago m ON p.id_medio_pago = m.id_medio_pago
+             WHERE p.id_venta = v.id_venta AND m.nombre = 'Efectivo'
+           )""",
+    )[0][0]
+    assert _cerca(resultado.filas[0][0], esperado) and 0 < esperado < _sql(conexion, "SELECT sum(importe) FROM ventas")[0][0]
+
+
+def test_metrica_con_varios_filtros_propios_se_combinan_con_and(conexion):
+    contenido = copy.deepcopy(MODELO_JSON)
+    contenido["metricas"].append(
+        {
+            "id": "efectivo_muchas_unidades",
+            "nombre": "Efectivo, muchas unidades",
+            "expresion": {
+                "agregacion": "suma",
+                "campo": "ventas.importe",
+                "filtros": [{"campo": "medios_pago.nombre", "valor": "Efectivo"}, {"campo": "ventas.cantidad", "operador": "mayor", "valor": 5}],
+            },
+            "formato": "moneda",
+        }
+    )
+    modelo_filtrado = modelo_efectivo(parsear_modelo(contenido))
+    resultado = _correr(conexion, modelo_filtrado, {"metricas": ["efectivo_muchas_unidades"]})
+    esperado = _sql(
+        conexion,
+        """SELECT sum(v.importe) FROM ventas v WHERE v.cantidad > 5 AND EXISTS (
+             SELECT 1 FROM pagos p JOIN medios_pago m ON p.id_medio_pago = m.id_medio_pago
+             WHERE p.id_venta = v.id_venta AND m.nombre = 'Efectivo'
+           )""",
+    )[0][0]
+    assert _cerca(resultado.filas[0][0], esperado) and esperado > 0
+
+
+def test_metrica_con_filtro_sobre_su_propia_entidad_no_necesita_join(conexion):
+    contenido = copy.deepcopy(MODELO_JSON)
+    contenido["metricas"].append(
+        {
+            "id": "importe_grandes",
+            "nombre": "Importe de ventas grandes",
+            "expresion": {"agregacion": "suma", "campo": "ventas.importe", "filtros": [{"campo": "ventas.cantidad", "operador": "mayor", "valor": 5}]},
+            "formato": "moneda",
+        }
+    )
+    modelo_filtrado = modelo_efectivo(parsear_modelo(contenido))
+    resultado = _correr(conexion, modelo_filtrado, {"metricas": ["importe_grandes"]})
+    esperado = _sql(conexion, "SELECT sum(importe) FROM ventas WHERE cantidad > 5")[0][0]
+    assert _cerca(resultado.filas[0][0], esperado) and esperado > 0
+
+
 def test_formula_entre_metricas_de_dos_entidades_y_anidada(conexion):
     contenido = copy.deepcopy(MODELO_JSON)
     contenido["metricas"].append({"id": "margen", "nombre": "Margen", "expresion": {"operacion": "resta", "izquierda": "total_ventas", "derecha": "total_pagado"}})

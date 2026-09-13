@@ -47,7 +47,10 @@ DESCRIPCIONES_MODELO: dict[str, str] = {
     "crear_metrica": (
         "Crea una métrica nueva: una agregación simple sobre un campo (suma, conteo, conteo_distinto, promedio, "
         "minimo, maximo), un cociente entre dos métricas de agregación, o una fórmula aritmética (suma, resta, "
-        "multiplicación, división) entre métricas existentes y constantes numéricas, anidable."
+        "multiplicación, división) entre métricas existentes y constantes numéricas, anidable. Una agregación "
+        "puede llevar además sus propios `filtros` (ej. 'ventas en efectivo' = suma filtrada por medio de pago): "
+        "se aplican siempre que se use esa métrica, en cualquier gráfico o KPI, sin necesidad de un filtro del "
+        "dashboard."
     ),
     "editar_metrica": "Edita el nombre, la expresión o el formato de una métrica existente.",
     "eliminar_metrica": "Elimina una métrica (falla si otra métrica la usa en un cociente o una fórmula).",

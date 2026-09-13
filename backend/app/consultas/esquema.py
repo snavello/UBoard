@@ -1,38 +1,23 @@
 """ConsultaSemantica: lo unico que el resto de la app (dashboard, explorador,
 preguntas del asistente) le pide al motor. Habla de metricas y campos del
-modelo; el compilador la traduce a SQL. Nadie mas escribe SQL."""
+modelo; el compilador la traduce a SQL. Nadie mas escribe SQL.
+
+`Operador` y `FiltroConsulta` viven en `modelo/esquema.py` desde que una
+metrica tambien puede llevar sus propios filtros (§ metricas filtradas):
+se reexportan aca para no romper a nadie que ya los importaba de este
+modulo."""
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.modelo.esquema import Granularidad, IdCorto, RefCampo
+from app.modelo.esquema import FiltroConsulta, Granularidad, IdCorto, Operador, RefCampo
 from app.nucleo.errores import ErrorApp
 
-Operador = Literal[
-    "igual",
-    "distinto",
-    "en",
-    "entre",
-    "mayor",
-    "mayor_igual",
-    "menor",
-    "menor_igual",
-    "contiene",
-    "es_nulo",
-    "no_es_nulo",
-]
+__all__ = ["ConsultaSemantica", "DimensionConsulta", "FiltroConsulta", "Operador", "OrdenConsulta", "parsear_consulta"]
 
 
 class _Base(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-class FiltroConsulta(_Base):
-    campo: RefCampo
-    operador: Operador = "igual"
-    # escalar para igual/distinto/mayor/...; lista para `en`; [desde, hasta] para
-    # `entre` (cualquiera de los dos puede ser null = abierto); nada para es_nulo
-    valor: Any = None
 
 
 class DimensionConsulta(_Base):

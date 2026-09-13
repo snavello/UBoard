@@ -49,6 +49,7 @@ MET_CAMPO = "MOD-MET-CAMPO"
 MET_AGREGACION = "MOD-MET-AGREGACION"
 MET_COCIENTE = "MOD-MET-COCIENTE"
 MET_FORMULA = "MOD-MET-FORMULA"
+MET_FILTRO = "MOD-MET-FILTRO"
 MET_CAMPO_NO_EFECTIVO = "MOD-MET-CAMPO-NO-EFECTIVO"
 TIEMPO_CAMPO = "MOD-TIEMPO-CAMPO"
 TIEMPO_TIPO = "MOD-TIEMPO-TIPO"
@@ -328,6 +329,9 @@ def _validar_metricas(modelo: ModeloSemantico) -> list[ErrorValidacion]:
                 errores.append(ErrorValidacion(MET_AGREGACION, ubicacion, f"'{expresion.agregacion}' necesita un campo numérico o de fecha y '{expresion.campo}' es {campo.tipo_dato}."))
             if metrica.estado == "confirmada" and not campo_efectivo(campo, modelo):
                 errores.append(ErrorValidacion(MET_CAMPO_NO_EFECTIVO, ubicacion, f"La métrica '{metrica.id}' está confirmada pero '{expresion.campo}' está rechazado o sin confirmar."))
+            for filtro in expresion.filtros:
+                if modelo.resolver_campo(filtro.campo) is None:
+                    errores.append(ErrorValidacion(MET_FILTRO, ubicacion, f"El filtro de '{metrica.id}' usa '{filtro.campo}', que no existe."))
         elif isinstance(expresion, ExpresionCociente):
             errores += _validar_cociente(metrica, expresion, modelo)
         else:

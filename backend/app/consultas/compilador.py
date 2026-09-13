@@ -26,12 +26,18 @@ Es el UNICO lugar donde el modelo se convierte en SQL. Reglas:
   lleva su propio NULLIF.
 - Los valores de los filtros van SIEMPRE como parametros (?), con CAST al tipo
   del campo.
+- Una metrica puede llevar sus propios filtros (`ExpresionAgregacion.filtros`,
+  ej. "ventas en efectivo"): se resuelven con el mismo mecanismo camino
+  seguro/JOIN o camino inseguro/EXISTS que los filtros de la consulta, pero
+  el resultado envuelve la columna en `CASE WHEN ... THEN columna ELSE NULL
+  END` en vez de ir al WHERE (que filtraria TODAS las metricas de la misma
+  subconsulta, no solo esta).
 """
 from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from app.consultas.esquema import ConsultaSemantica, DimensionConsulta, FiltroConsulta
 from app.modelo.esquema import (
@@ -304,15 +310,17 @@ class Compilador:
                 condiciones.append(self._existe(camino[posicion_insegura:], entidad_filtro, campo_filtro, filtro))
 
         seleccion = [f"{self._expresion_dimension(dimension)} AS {identificador(dimension.alias)}" for dimension in dimensiones]
+        parametros_agregaciones: list[Any] = []
         for agregacion in agregaciones:
-            columna = f"{identificador(agregacion.entidad.id)}.{identificador(agregacion.campo.columna_origen)}"
+            columna, params_columna = self._columna_agregacion(agregacion, unir_camino)
+            parametros_agregaciones.extend(params_columna)
             seleccion.append(f"{AGREGACION_SQL[agregacion.expresion.agregacion].format(columna)} AS {identificador(agregacion.metrica.id)}")
 
         sql = f"SELECT {', '.join(seleccion)} FROM {identificador(base.fuente)} AS {identificador(base.id)}"
         for paso in joins:
             hasta = self._entidad(paso.hasta)
             sql += f" LEFT JOIN {identificador(hasta.fuente)} AS {identificador(hasta.id)} ON {self._condicion(paso.relacion, {})}"
-        parametros: list[Any] = []
+        parametros: list[Any] = list(parametros_agregaciones)
         if condiciones:
             sql += " WHERE " + " AND ".join(condicion.sql for condicion in condiciones)
             for condicion in condiciones:
@@ -320,6 +328,38 @@ class Compilador:
         if dimensiones:
             sql += " GROUP BY " + ", ".join(str(i + 1) for i in range(len(dimensiones)))
         return _Fragmento(sql, parametros)
+
+    def _columna_agregacion(self, agregacion: _Agregacion, unir_camino: Callable[[list[_Paso]], None]) -> tuple[str, list[Any]]:
+        """La columna que va adentro de SUM/COUNT/etc. Sin filtro propio, es
+        la columna tal cual. Con filtro (metricas filtradas, ej. "ventas en
+        efectivo"), se envuelve en `CASE WHEN ... THEN columna ELSE NULL
+        END`: todas las agregaciones (SUM, COUNT, AVG, MIN, MAX) ignoran los
+        NULL solas, asi que un mismo mecanismo sirve para todas. El camino
+        desde la entidad de la metrica hasta la del filtro puede ser seguro
+        (se une con JOIN, como una dimension) o del lado "muchos" (se
+        resuelve con el mismo EXISTS que ya usan los filtros de la
+        consulta): una metrica sobre `ventas` no puede hacer JOIN directo a
+        `pagos` sin multiplicar filas, pero preguntar "existe un pago en
+        efectivo de esta venta" es una condicion bien definida."""
+        columna = f"{identificador(agregacion.entidad.id)}.{identificador(agregacion.campo.columna_origen)}"
+        if not agregacion.expresion.filtros:
+            return columna, []
+        condiciones: list[_Fragmento] = []
+        for filtro in agregacion.expresion.filtros:
+            entidad_filtro, campo_filtro = self._campo(filtro.campo)
+            camino = self._camino(agregacion.entidad.id, entidad_filtro.id)
+            if camino is None:
+                raise ErrorApp("E-CONS-02", f"{agregacion.entidad.id} y {entidad_filtro.id}")
+            posicion_insegura = next((i for i, paso in enumerate(camino) if not paso.seguro), None)
+            if posicion_insegura is None:
+                unir_camino(camino)
+                condiciones.append(self._predicado(entidad_filtro.id, campo_filtro, filtro))
+            else:
+                unir_camino(camino[:posicion_insegura])
+                condiciones.append(self._existe(camino[posicion_insegura:], entidad_filtro, campo_filtro, filtro))
+        parametros = [valor for condicion in condiciones for valor in condicion.parametros]
+        condicion_sql = " AND ".join(condicion.sql for condicion in condiciones)
+        return f"CASE WHEN {condicion_sql} THEN {columna} ELSE NULL END", parametros
 
     def _existe(
         self, pasos: list[_Paso], entidad_filtro: Entidad, campo_filtro: Campo, filtro: FiltroConsulta
