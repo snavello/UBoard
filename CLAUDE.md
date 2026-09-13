@@ -488,7 +488,7 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     se probó la cadena completa hasta el asistente: contestó con el mismo
     número exacto de la corrida de referencia. Lo único que no se puede
     probar sin una persona hablando de verdad es el reconocimiento en sí.
-  - **Fase 3 lista para que Sd la acepte** (no aceptada todavía).
+  - **Fase 3 aceptada por Sd el 2026-09-13** (junto con la fase 4).
 - **Fase 4 — Interacción y filtrado asociativo: EN CURSO**, arrancada de
   forma ad-hoc a pedido directo de Sd (todavía sin el documento de
   lectura/dudas/decisiones/plan completo que llevan las fases anteriores,
@@ -627,9 +627,9 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     sesión (diagrama, click-to-filter, estado gris de un filtro
     restringido por otro, el asistente aplicando un filtro), no cada una
     aislada como en las verificaciones de cada paso. Sin cambios de
-    código; organización de prueba borrada al terminar. **Fase 4 completa,
-    a la espera de que Sd la acepte** (junto con la fase 3, que había
-    quedado pendiente de esa misma confirmación desde el paso 22).
+    código; organización de prueba borrada al terminar.
+  - **Fase 4 aceptada por Sd el 2026-09-13** (junto con la fase 3,
+    pendiente de esa misma confirmación desde el paso 22).
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):

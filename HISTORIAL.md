@@ -1526,3 +1526,16 @@ Sin cambios de código en este paso (solo el documento de aceptación y la
 verificación). 356 tests de backend, build y 17 de vitest sin cambios.
 Organización de prueba (`PruebaAceptacionFase4`) borrada por SQL crudo al
 terminar; la demo no se tocó.
+
+## 2026-09-13 — Fase 3 y fase 4 aceptadas por Sd
+
+Sd contestó "acepto" a la propuesta de cerrar las dos fases juntas: la
+fase 3 (asistente), que había quedado documentada como "lista para
+aceptar" desde el paso 22 pero sin una confirmación explícita porque el
+trabajo siguió derecho hacia la fase 4 a pedido suyo; y la fase 4
+(interacción y filtrado asociativo), con el checklist recién armado en
+`docs/fase4-aceptacion.md`. No hay todavía un plan de una fase 5 para
+presentar — la fase 4 sigue abierta en los hechos (quedan pendientes
+conocidos, como el estado gris completo en los gráficos), así que por
+ahora esto es un cierre formal de lo hecho hasta acá, no un arranque de
+etapa nueva.
