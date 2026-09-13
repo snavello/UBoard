@@ -707,6 +707,35 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     lugar del principal lo agranda; arrastrar una pestaña del explorador
     la reordena; el click-to-filter y las pestañas fijas de Modelo siguen
     andando exactamente igual que antes.
+  - Arreglo: el arrastre solo insertaba "antes", el ícono era casi
+    invisible: HECHO 2026-09-13 (v0.28.02). Sd probó la primera versión y
+    reportó dos problemas reales: el ícono `⠿` (Unicode, Braille) se veía
+    "muy poco visible" con la tipografía del sitio, y el movimiento "no es
+    libre, solo puedo intercambiar la posición de un gráfico con otro".
+    Lo segundo era un límite real del diseño, no una percepción: `mover`
+    solo sabía insertar el elemento arrastrado ANTES del que se soltaba
+    encima, así que nunca se lo podía dejar realmente al final de la
+    lista — parecía "intercambio" porque esa era, en los hechos, la única
+    maniobra posible con pocos elementos. Se agregó un lado
+    (`"antes" | "despues"`) a `moverEnOrden`, decidido por
+    `ladoDeSoltar` (`compartido/arrastre.ts`, ahora solo geometría pura:
+    en que mitad del rectángulo del destino cae el puntero, por la
+    diagonal arriba-izquierda vs abajo-derecha — funciona igual para una
+    fila, una columna o una grilla de 2, sin necesitar saber la
+    orientación de cada layout). Se sumó además una vista previa EN VIVO
+    mientras se arrastra (antes solo se veía el resultado recién al
+    soltar): `useOrdenPersonal` mantiene un estado transitorio que se va
+    recalculando en cada `dragover` y recién se persiste en `onDrop`; si
+    se suelta afuera de cualquier elemento válido, `onDragEnd` lo
+    descarta sin guardar nada. El ícono se reemplazó por un SVG propio
+    (`compartido/componentes/AgarraderoArrastre.tsx`, seis puntos en una
+    pastilla con borde) para que el tamaño y el contraste no dependan de
+    qué fuente esté instalada. 4 tests nuevos de vitest para
+    `ladoDeSoltar` y 2 casos nuevos para `moverEnOrden` con `"despues"`
+    (35 en total). Verificado en Docker reproduciendo el caso puntual que
+    describía Sd: soltar un elemento pasado el último ahora sí lo deja
+    último de verdad, y arrastrar por encima de varios elementos seguidos
+    antes de soltar reordena en vivo a cada paso, no solo al final.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -1221,12 +1250,21 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   más. El primero de la lista sigue siendo el elemento "protagonista" de
   su sección (cifra grande, gráfico ancho): arrastrar otro al principio
   lo promueve. Drag and drop nativo del navegador, sin librería; en los
-  gráficos el agarradero (`⠿`, en la cabecera) está separado del
-  contenedor a propósito, para no interferir con el click-to-filter del
-  cuerpo del gráfico (paso A). **Ojo con las reglas de los hooks**: los
-  hooks de esto (y cualquier hook nuevo) van ANTES de cualquier `return`
-  temprano de carga/error del componente, nunca después — ya causó un
-  error real (#310) en `Tablero.tsx` la primera vez.
+  gráficos el agarradero (`AgarraderoArrastre`, SVG propio, en la
+  cabecera) está separado del contenedor a propósito, para no interferir
+  con el click-to-filter del cuerpo del gráfico (paso A). El arrastre
+  tiene vista previa EN VIVO (se ve la lista reacomodarse a medida que se
+  pasa por cada elemento, no solo el resultado al soltar) y se puede
+  insertar tanto antes como después de cualquier elemento —
+  `ladoDeSoltar` decide segun en que mitad cae el puntero (diagonal
+  arriba-izquierda vs abajo-derecha, sirve para fila/columna/grilla por
+  igual) — necesario para poder dejar algo realmente al final de la
+  lista, no solo "antes de": la primera versión no lo permitía y Sd la
+  probó y la calificó de "bastante inservible" en los hechos, con razón.
+  **Ojo con las reglas de los hooks**: los hooks de esto (y cualquier
+  hook nuevo) van ANTES de cualquier `return` temprano de carga/error del
+  componente, nunca después — ya causó un error real (#310) en
+  `Tablero.tsx` la primera vez.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

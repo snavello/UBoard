@@ -9,6 +9,9 @@
 .activa { color: var(--tinta); border-bottom-color: var(--acento); font-weight: 600; }
 .pestania[draggable="true"] { cursor: grab; }
 .pestania[draggable="true"]:active { cursor: grabbing; }
-.destinoArrastre { outline: 2px dashed var(--acento); outline-offset: -3px; }
+/* Fila horizontal: antes/despues se ve mejor como borde izquierdo/derecho
+   que como el rincon diagonal que usan los bloques verticales. */
+.destinoAntes { box-shadow: inset 3px 0 0 var(--acento); }
+.destinoDespues { box-shadow: inset -3px 0 0 var(--acento); }
 .extra { margin-left: 8px; color: var(--mudo); font-size: 13px; font-weight: 400; }
 .derecha { margin-left: auto; padding-bottom: 8px; color: var(--mudo); font-size: 13px; }

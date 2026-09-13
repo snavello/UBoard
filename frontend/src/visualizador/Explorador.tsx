@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { pedir, rutaWorkspace } from "../compartido/api";
-import { useArrastreDeOrden } from "../compartido/arrastre";
 import { AvisoError } from "../compartido/componentes/Aviso";
 import { Cargando } from "../compartido/componentes/Cargando";
 import { Paginador } from "../compartido/componentes/Paginador";
@@ -27,8 +26,7 @@ function capitalizar(texto: string): string {
 export function Explorador({ workspaceId, spec, filtros }: Props) {
   // El orden de las pestanias es una preferencia personal (arrastrar y
   // soltar, guardada en este navegador), no la estructura del spec.
-  const [pestanias, moverPestania] = useOrdenPersonal("pestanias", workspaceId, spec.explorador.pestanias, (pestania: PestaniaSpec) => pestania.entidad);
-  const arrastrePestanias = useArrastreDeOrden(moverPestania);
+  const [pestanias, arrastrePestanias] = useOrdenPersonal("pestanias", workspaceId, spec.explorador.pestanias, (pestania: PestaniaSpec) => pestania.entidad);
   const [activa, setActiva] = useState(pestanias[0]?.entidad ?? "");
   const [pagina, setPagina] = useState(1);
   const [orden, setOrden] = useState<{ por: string; direccion: "asc" | "desc" } | null>(null);

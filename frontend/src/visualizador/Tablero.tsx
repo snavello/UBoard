@@ -7,7 +7,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Chat } from "../asistente/Chat";
 import { codigoDeError, pedir, rutaWorkspace } from "../compartido/api";
-import { useArrastreDeOrden } from "../compartido/arrastre";
 import { Aviso, AvisoError, ListaErrores } from "../compartido/componentes/Aviso";
 import { Cargando } from "../compartido/componentes/Cargando";
 import { Marco } from "../compartido/componentes/Marco";
@@ -46,8 +45,7 @@ export function Tablero() {
   // de los hooks: siempre el mismo orden en todos los renders). Con
   // "graficos ?? []" cuando el dashboard todavia no llego, no hay nada para
   // reordenar todavia y no pasa nada raro.
-  const [graficosOrdenados, moverGrafico] = useOrdenPersonal("graficos", workspaceId, dashboard.data?.contenido.graficos ?? [], (grafico) => grafico.id);
-  const arrastreGraficos = useArrastreDeOrden(moverGrafico);
+  const [graficosOrdenados, arrastreGraficos] = useOrdenPersonal("graficos", workspaceId, dashboard.data?.contenido.graficos ?? [], (grafico) => grafico.id);
 
   if (dashboard.isPending) {
     return (
@@ -123,7 +121,7 @@ export function Tablero() {
               onCambiarFiltros={cambiarFiltros}
               arrastreHandle={arrastreGraficos.handleProps(graficoPrincipal.id)}
               arrastreContenedor={arrastreGraficos.contenedorProps(graficoPrincipal.id)}
-              esDestinoArrastre={arrastreGraficos.esDestino(graficoPrincipal.id)}
+              ladoDestinoArrastre={arrastreGraficos.ladoDestino(graficoPrincipal.id)}
             />
           )}
           {graficosSecundarios.length > 0 && (
@@ -140,7 +138,7 @@ export function Tablero() {
                   onCambiarFiltros={cambiarFiltros}
                   arrastreHandle={arrastreGraficos.handleProps(grafico.id)}
                   arrastreContenedor={arrastreGraficos.contenedorProps(grafico.id)}
-                  esDestinoArrastre={arrastreGraficos.esDestino(grafico.id)}
+                  ladoDestinoArrastre={arrastreGraficos.ladoDestino(grafico.id)}
                 />
               ))}
             </div>

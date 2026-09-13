@@ -4,13 +4,8 @@
 .controles { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 /* Arrastrar para reordenar (preferencia personal, ver compartido/ordenPersonal.ts) */
-.agarradero {
-  padding: 2px 4px; font-size: 13px; color: var(--mudo);
-  cursor: grab; border-radius: 4px; line-height: 1;
-}
-.agarradero:hover { background: var(--superficie-2); color: var(--tinta-2); }
-.agarradero:active { cursor: grabbing; }
-.destinoArrastre { outline: 2px dashed var(--acento); outline-offset: 4px; border-radius: var(--radio); }
+.destinoAntes { box-shadow: inset 3px 3px 0 0 var(--acento); }
+.destinoDespues { box-shadow: inset -3px -3px 0 0 var(--acento); }
 .titulo { font-size: 20px; }
 .lienzo { width: 100%; }
 .clickeable { cursor: pointer; }

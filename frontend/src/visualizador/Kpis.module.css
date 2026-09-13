@@ -19,11 +19,6 @@
 .cifra { font-family: var(--fuente-titulo); font-size: clamp(22px, 1.9vw, 30px); line-height: 1.1; white-space: nowrap; }
 
 /* Arrastrar para reordenar (preferencia personal, ver compartido/ordenPersonal.ts) */
-.agarradero {
-  position: absolute; top: -2px; right: -2px;
-  padding: 2px 4px; font-size: 13px; color: var(--mudo);
-  cursor: grab; border-radius: 4px; line-height: 1;
-}
-.agarradero:hover { background: var(--superficie-2); color: var(--tinta-2); }
-.agarradero:active { cursor: grabbing; }
-.destinoArrastre { outline: 2px dashed var(--acento); outline-offset: 4px; border-radius: var(--radio); }
+.agarraderoPosicion { position: absolute; top: -8px; right: -8px; }
+.destinoAntes { box-shadow: inset 3px 3px 0 0 var(--acento); border-radius: var(--radio); }
+.destinoDespues { box-shadow: inset -3px -3px 0 0 var(--acento); border-radius: var(--radio); }

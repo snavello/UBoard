@@ -1740,3 +1740,76 @@ inexistente). Sin tests de componente — se verifica arrastrando de
 verdad en el navegador, mismo criterio que el resto de esta pantalla
 desde el paso 7. Sin cambios de backend: la suite sigue en 361 tests,
 sin cambios desde el paso anterior.
+
+## 2026-09-13 — Arreglo del arrastre: insertar tambien "despues", icono visible (v0.28.02)
+
+Sd probó la primera versión del orden por arrastre y avisó dos problemas
+concretos: "ahora veo el ícono (muy poco visible) y la verdad es que el
+movimiento no es libre solo puedo intercambiar la posición de un gráfico
+con otro. Bastante inservible".
+
+El segundo problema, revisado el código, resultó ser un límite real del
+diseño, no una percepción equivocada de Sd: `moverEnOrden` solo sabía
+insertar el elemento arrastrado JUSTO ANTES de donde se soltaba. Con
+pocos elementos (4 o 5 KPIs, 6 gráficos), la única maniobra posible en la
+práctica termina pareciéndose a un intercambio de a pares, porque nunca
+se puede dejar algo genuinamente AL FINAL de la lista — soltarlo sobre el
+último elemento lo deja justo antes de ese último, nunca después. Eso
+explica el "bastante inservible": para reordenar de verdad hacía falta
+justo la única operación que no estaba disponible.
+
+La solución fue agregarle a `moverEnOrden` un tercer parámetro, `lado:
+"antes" | "despues"`, y decidir cuál corresponde según en qué mitad del
+elemento se suelta. La geometría quedó en una función pura nueva,
+`ladoDeSoltar` (`compartido/arrastre.ts`, que ahora solo tiene esto — la
+parte con estado se mudó a `ordenPersonal.ts`): en vez de mirar solo el
+eje X o solo el eje Y (que hubiera necesitado saber si cada layout es una
+fila, una columna o una grilla de 2), mira la diagonal del rectángulo:
+si el puntero cae en la mitad de arriba-a-la-izquierda es "antes", si
+cae en la de abajo-a-la-derecha es "después". Funciona razonablemente
+para los tres layouts de esta pantalla (la fila de pestañas, la grilla
+de 2 columnas de KPIs y gráficos, los bloques sueltos) sin necesitar una
+configuración distinta para cada uno.
+
+De paso se sumó algo que la primera versión tampoco tenía: vista previa
+EN VIVO mientras se arrastra. Antes, arrastrar un elemento por encima de
+varios otros no mostraba nada hasta soltar — un solo salto discreto al
+final, que reforzaba la sensación de "intercambio" en vez de reordenar
+de verdad. Ahora `useOrdenPersonal` mantiene un estado transitorio
+(`vistaPrevia`) que se recalcula en cada `dragover` (recorriendo la
+misma `moverEnOrden`, esta vez sobre el estado previo, no sobre el orden
+persistido), así que los demás elementos se van corriendo para hacer
+lugar a medida que uno arrastra — recién al soltar (`onDrop`) esa vista
+previa se guarda de verdad en `localStorage`; si se suelta afuera de
+cualquier elemento válido, `onDragEnd` la descarta sin persistir nada y
+todo vuelve a como estaba.
+
+El primer problema — el ícono "muy poco visible" — era el caracter
+Unicode `⠿` (del bloque Braille), que en Source Sans 3 se renderiza como
+un punto chico y débil, casi imperceptible con el color apagado
+(`--mudo`) que se le había puesto. Se reemplazó por un componente propio,
+`compartido/componentes/AgarraderoArrastre.tsx`: un SVG a mano de seis
+círculos (el símbolo de "agarradero" más reconocible en el mundo del
+software, el mismo patrón visual que usan Trello, Notion, etc.) adentro
+de una pastilla con borde y fondo (`var(--superficie-2)`), así el tamaño
+y el contraste no dependen de qué fuente tenga instalada quien lo mire.
+
+Verificado en Docker reproduciendo el caso puntual: se armó una corrida
+que arrastra un KPI y lo suelta pasado el último elemento de la lista —
+en la primera versión esto era imposible (quedaba tercero de cuatro, no
+cuarto); con el arreglo, queda efectivamente último. Se probó lo mismo
+con un gráfico. También se verificó la vista previa en vivo, arrastrando
+un elemento por encima de tres posiciones distintas antes de soltar y
+confirmando que la lista se reacomodaba en cada paso intermedio, no solo
+al final. El click-to-filter de los gráficos (paso A) siguió andando
+exactamente igual, confirmando que el agarradero separado del contenedor
+sigue sin interferir.
+
+4 tests nuevos de vitest para `ladoDeSoltar` (las esquinas, el centro
+exacto como caso límite a favor de "antes", y un rectángulo sin tamaño
+que no debería pasar en la práctica pero tampoco rompe nada) y 2 casos
+nuevos para `moverEnOrden` con `"despues"` (35 tests de frontend en
+total). Sin cambios de backend: la suite sigue en 361 tests, sin cambios.
+Organización descartable no hizo falta esta vez: se verificó contra la
+demo real sin alterarla (el orden vive en `localStorage`, nunca toca la
+base).

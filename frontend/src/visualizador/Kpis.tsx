@@ -1,14 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { pedir, rutaWorkspace } from "../compartido/api";
-import { useArrastreDeOrden } from "../compartido/arrastre";
+import { AgarraderoArrastre } from "../compartido/componentes/AgarraderoArrastre";
 import { AvisoError } from "../compartido/componentes/Aviso";
 import { Esqueleto } from "../compartido/componentes/Cargando";
 import { formatearMetrica } from "../compartido/formato";
-import { useOrdenPersonal } from "../compartido/ordenPersonal";
+import { type ControlesArrastre, useOrdenPersonal } from "../compartido/ordenPersonal";
 import type { KpiSalida, SpecDashboard } from "../tipos";
 import estilos from "./Kpis.module.css";
 import { parametroFiltros } from "./Tablero";
+
+function claseDestino(arrastre: ControlesArrastre, id: string): string {
+  const lado = arrastre.ladoDestino(id);
+  return lado === "antes" ? estilos.destinoAntes : lado === "despues" ? estilos.destinoDespues : "";
+}
 
 interface Props {
   workspaceId: number;
@@ -41,19 +46,15 @@ function KpisOrdenables({ workspaceId, spec, kpis, atenuado }: { workspaceId: nu
   // El orden es una preferencia personal (arrastrar y soltar, guardada en
   // este navegador): el primero de la lista sigue siendo el protagonista,
   // así que arrastrar otro KPI al principio lo promueve a cifra grande.
-  const [ordenados, mover] = useOrdenPersonal("kpis", workspaceId, kpis, (kpi) => kpi.id);
-  const arrastre = useArrastreDeOrden(mover);
+  const [ordenados, arrastre] = useOrdenPersonal("kpis", workspaceId, kpis, (kpi) => kpi.id);
   const [protagonista, ...resto] = ordenados;
 
   return (
     <div className={`${estilos.kpis} ${atenuado ? estilos.atenuado : ""}`}>
-      <div
-        className={`${estilos.protagonista} ${arrastre.esDestino(protagonista.id) ? estilos.destinoArrastre : ""}`}
-        {...arrastre.contenedorProps(protagonista.id)}
-      >
-        <span className={estilos.agarradero} {...arrastre.handleProps(protagonista.id)} title="Arrastrar para reordenar" aria-hidden="true">
-          ⠿
-        </span>
+      <div className={`${estilos.protagonista} ${claseDestino(arrastre, protagonista.id)}`} {...arrastre.contenedorProps(protagonista.id)}>
+        <div className={estilos.agarraderoPosicion}>
+          <AgarraderoArrastre arrastrar={arrastre.handleProps(protagonista.id)} />
+        </div>
         <span className={estilos.etiqueta}>{protagonista.titulo}</span>
         <span className={`${estilos.cifraGrande}`}>{formatearMetrica(protagonista.valor, protagonista.formato)}</span>
         {spec.filtros.length > 0 && <span className="mudo">con los filtros activos</span>}
@@ -61,14 +62,10 @@ function KpisOrdenables({ workspaceId, spec, kpis, atenuado }: { workspaceId: nu
       {resto.length > 0 && (
         <dl className={estilos.grilla}>
           {resto.map((kpi) => (
-            <div
-              key={kpi.id}
-              className={`${estilos.kpi} ${arrastre.esDestino(kpi.id) ? estilos.destinoArrastre : ""}`}
-              {...arrastre.contenedorProps(kpi.id)}
-            >
-              <span className={estilos.agarradero} {...arrastre.handleProps(kpi.id)} title="Arrastrar para reordenar" aria-hidden="true">
-                ⠿
-              </span>
+            <div key={kpi.id} className={`${estilos.kpi} ${claseDestino(arrastre, kpi.id)}`} {...arrastre.contenedorProps(kpi.id)}>
+              <div className={estilos.agarraderoPosicion}>
+                <AgarraderoArrastre arrastrar={arrastre.handleProps(kpi.id)} />
+              </div>
               <dt className={estilos.etiqueta}>{kpi.titulo}</dt>
               <dd className={estilos.cifra}>{formatearMetrica(kpi.valor, kpi.formato)}</dd>
             </div>

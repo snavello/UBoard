@@ -21,18 +21,24 @@ describe("combinarOrden", () => {
 });
 
 describe("moverEnOrden", () => {
-  it("mueve un elemento justo antes de otro, mas adelante en la lista", () => {
+  it('con lado "antes" (default), inserta justo antes del destino', () => {
     expect(moverEnOrden(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "a", "c", "d"]);
   });
 
-  it("mueve un elemento justo antes de otro, mas atras en la lista", () => {
-    expect(moverEnOrden(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+  it('con lado "despues", inserta justo despues del destino', () => {
+    expect(moverEnOrden(["a", "b", "c", "d"], "a", "c", "despues")).toEqual(["b", "c", "a", "d"]);
   });
 
-  it("mover el primero al final (arrastrarlo mas alla del ultimo) lo deja justo antes del ultimo", () => {
-    // "mover antes de X" no tiene un "al final" explicito: para eso hay que
-    // soltarlo sobre el ultimo elemento, que lo deja inmediatamente antes.
-    expect(moverEnOrden(["a", "b", "c"], "a", "c")).toEqual(["b", "a", "c"]);
+  it('soltar "despues" del ultimo elemento deja el origen realmente al final (el bug que reporto Sd: antes esto era imposible)', () => {
+    expect(moverEnOrden(["a", "b", "c"], "a", "c", "despues")).toEqual(["b", "c", "a"]);
+  });
+
+  it('soltar "antes" del primer elemento deja el origen realmente al principio', () => {
+    expect(moverEnOrden(["a", "b", "c"], "c", "a", "antes")).toEqual(["c", "a", "b"]);
+  });
+
+  it("mueve un elemento hacia atras en la lista", () => {
+    expect(moverEnOrden(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
   });
 
   it("no hace nada si el origen y el destino son el mismo", () => {

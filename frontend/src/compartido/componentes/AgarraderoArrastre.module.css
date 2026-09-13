@@ -1,0 +1,10 @@
+.agarradero {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex-shrink: 0;
+  border: 1px solid var(--linea); border-radius: var(--radio);
+  background: var(--superficie-2); color: var(--tinta-2);
+  cursor: grab;
+}
+.agarradero svg circle { fill: currentColor; }
+.agarradero:hover { background: var(--acento-suave); color: var(--acento); border-color: var(--acento); }
+.agarradero:active { cursor: grabbing; }

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { pedir, rutaWorkspace } from "../compartido/api";
+import { AgarraderoArrastre } from "../compartido/componentes/AgarraderoArrastre";
 import { AvisoError } from "../compartido/componentes/Aviso";
 import { Esqueleto } from "../compartido/componentes/Cargando";
 import { SIN_DATO, etiquetaPeriodo, formatearMetrica } from "../compartido/formato";
@@ -28,8 +29,8 @@ interface Props {
   // del cuerpo del grafico. Sin esto (Modelo/Diagrama no lo pasan) el
   // grafico se ve igual que siempre, sin agarradero.
   arrastreHandle?: { draggable: true; onDragStart: (evento: React.DragEvent) => void; onDragEnd: () => void };
-  arrastreContenedor?: { onDragOver: (evento: React.DragEvent) => void; onDragLeave: () => void; onDrop: (evento: React.DragEvent) => void };
-  esDestinoArrastre?: boolean;
+  arrastreContenedor?: { onDragOver: (evento: React.DragEvent) => void; onDrop: (evento: React.DragEvent) => void };
+  ladoDestinoArrastre?: "antes" | "despues" | null;
 }
 
 export function Grafico({
@@ -42,7 +43,7 @@ export function Grafico({
   onCambiarFiltros,
   arrastreHandle,
   arrastreContenedor,
-  esDestinoArrastre,
+  ladoDestinoArrastre,
 }: Props) {
   const [comoTabla, setComoTabla] = useState(false);
   const tema = useTema();
@@ -70,7 +71,9 @@ export function Grafico({
   const contenedor = useGrafico(opcion, filtroClickeable ? alClickear : undefined);
   return (
     <figure
-      className={`${estilos.grafico} ${consulta.isPlaceholderData ? estilos.atenuado : ""} ${esDestinoArrastre ? estilos.destinoArrastre : ""}`}
+      className={`${estilos.grafico} ${consulta.isPlaceholderData ? estilos.atenuado : ""} ${
+        ladoDestinoArrastre === "antes" ? estilos.destinoAntes : ladoDestinoArrastre === "despues" ? estilos.destinoDespues : ""
+      }`}
       {...arrastreContenedor}
     >
       <figcaption className={estilos.cabecera}>
@@ -80,11 +83,7 @@ export function Grafico({
           {filtroClickeable && !comoTabla && <span className={`mudo ${estilos.pista}`}>Clickeá para filtrar por {filtroClickeable.etiqueta ?? filtroClickeable.campo}</span>}
         </div>
         <div className={estilos.controles}>
-          {arrastreHandle && (
-            <span className={estilos.agarradero} {...arrastreHandle} title="Arrastrar para reordenar" aria-hidden="true">
-              ⠿
-            </span>
-          )}
+          {arrastreHandle && <AgarraderoArrastre arrastrar={arrastreHandle} />}
           {datos && datos.filas.length > 0 && (
             <button type="button" className="boton boton--texto boton--chico" onClick={() => setComoTabla((valor) => !valor)}>
               {comoTabla ? "Ver gráfico" : "Ver tabla"}
