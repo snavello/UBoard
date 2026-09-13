@@ -1813,3 +1813,69 @@ total). Sin cambios de backend: la suite sigue en 361 tests, sin cambios.
 Organización descartable no hizo falta esta vez: se verificó contra la
 demo real sin alterarla (el orden vive en `localStorage`, nunca toca la
 base).
+
+## 2026-09-13 — Espacio muerto debajo de los KPIs, y backlog de ventanas libres (v0.28.03)
+
+Sd notó algo que venía de antes de esta sesión, no del arrastre: "debajo
+de los KPI y a la izquierda de la pantalla queda un espacio de casi un
+tercio del ancho total que no se puede poner nada". Aprovechó para
+preguntar, de paso, qué tan costoso sería ir más lejos: "ventanas" que se
+puedan mover libremente por toda la pantalla y redimensionar, como un
+canvas de verdad (Grafana, Power BI en modo edición).
+
+Antes de tocar código se conversó el alcance, en prosa, sin necesidad de
+`AskUserQuestion` porque no había una decisión de arquitectura ambigua
+sino una pregunta de costo honesta. La respuesta: son dos cosas de
+tamaño muy distinto. El espacio muerto es un ajuste de CSS chico — la
+grilla de 2 columnas (`minmax(280px,4fr) 8fr`) estira ambas columnas a
+la misma altura, y como la de KPIs tiene menos contenido que la de
+gráficos, sobra espacio abajo. Las ventanas libres y redimensionables son
+un salto real: cambia el modelo de datos (de "un orden de ids" a
+"posición x/y y tamaño por panel"), necesita manijas de resize,
+lógica para que no se superpongan o para que fluyan al achicar la
+ventana, y una decisión de qué pasa en el celular. Se le comentó a Sd que
+probablemente convendría sumar una librería chica y madura
+(`react-grid-layout` es la más usada) en vez de escribir todo eso a
+mano — sería la primera dependencia de UI externa de todo el frontend,
+que hasta ahora fue deliberadamente "cero librerías" (ni Tailwind, ni un
+kit de componentes, ECharts directo sin wrapper). Sd preguntó además si
+sacar el resize de mobile del alcance reducía mucho el trabajo: la
+respuesta fue que no — ahorra construir manijas táctiles y la UX de
+redimensionar con el dedo en una pantalla chica, pero el motor de
+posicionamiento libre en sí (el modelo de datos, las colisiones, el
+drag con resize en desktop) es el mismo trabajo esté o no mobile
+involucrado, porque esa complejidad vive del lado de escritorio igual.
+
+Con esos números sobre la mesa, Sd decidió: la versión chica ahora,
+ventanas libres y redimensionables **al backlog, sin fecha**.
+
+La versión chica: separar, en `Tablero.tsx`, el gráfico principal (el
+que acompaña a los KPIs arriba) de los gráficos secundarios. Antes, los
+tres vivían adentro de la misma `<section>` confinada a la columna
+angosta de 8/12 al lado de los KPIs — ahí es donde se generaba el hueco,
+porque esa columna entera (incluidos los secundarios) terminaba tan alta
+como hiciera falta para acomodarlos a todos, mientras la columna de KPIs
+se quedaba corta. La solución: los gráficos secundarios salen de esa
+columna y arman su propia fila, DEBAJO de la grilla de 2 columnas
+KPIs/principal, usando el ancho COMPLETO de la pantalla
+(`grid-template-columns: repeat(auto-fit, minmax(320px, 1fr))`, así se
+acomodan solos en 2, 3 o más columnas según cuántos gráficos haya y
+cuánto ancho sobre, sin necesidad de un número fijo). Como ahora la
+columna de KPIs solo compite en altura con UN gráfico (el principal, no
+toda la pila), el desnivel que dejaba el hueco es mucho menor.
+
+Se sacó también la regla de mobile que forzaba `.grilla` a una sola
+columna: con `auto-fit` y un mínimo de 320px por tarjeta, en una pantalla
+de celular esa regla ya no hacía falta (menos de 320px×2 no entran dos
+columnas de todos modos) y en tablets medianos ahora se aprovecha mejor
+el ancho completo (2 columnas en vez de forzar 1). Verificado que en
+mobile los gráficos siguen apilados en una sola columna, sin cambios de
+comportamiento ahí — tal como pidió Sd para esta ronda.
+
+Sin cambios de backend, sin tests nuevos: es reordenar JSX existente y
+ajustar CSS, sin lógica nueva que valga la pena testear aparte (mismo
+criterio que el resto de esta pantalla). Verificado en Docker contra la
+demo real, en desktop (los 3 gráficos secundarios pasan de una grilla de
+2 confinada a 3 a todo el ancho) y en mobile (una sola columna, sin
+cambios). El click-to-filter de los gráficos y el arrastre para
+reordenar siguen andando igual que antes del cambio de layout.

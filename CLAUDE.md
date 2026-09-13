@@ -736,6 +736,31 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     describía Sd: soltar un elemento pasado el último ahora sí lo deja
     último de verdad, y arrastrar por encima de varios elementos seguidos
     antes de soltar reordena en vivo a cada paso, no solo al final.
+  - Arreglo: espacio muerto debajo de los KPIs: HECHO 2026-09-13
+    (v0.28.03). Sd marcó que quedaba "casi un tercio del ancho total" sin
+    uso debajo de la columna de KPIs, porque esa columna es más corta que
+    la de gráficos y la grilla de 2 columnas (`minmax(280px,4fr) 8fr`)
+    las estira parejas. Antes de tocar código se le preguntó por la
+    alternativa grande (ventanas libres, movibles y redimensionables como
+    un canvas de verdad): confirmado que es un salto de complejidad real
+    (cambia el modelo de datos de "un orden" a "x/y/ancho/alto" por
+    panel, necesita resize con manijas y evitar superposiciones; probable
+    candidata a sumar `react-grid-layout`, la primera dependencia de UI
+    externa del frontend) — Sd lo mandó al backlog, sin fecha, y pidió la
+    versión chica: separar el gráfico principal (el que acompaña a los
+    KPIs) de los gráficos secundarios, que ahora arman su propia fila a
+    TODO el ancho de la pantalla (`grid-template-columns: repeat(auto-fit,
+    minmax(320px, 1fr))`) en vez de quedar confinados a la columna angosta
+    de al lado de los KPIs. Como la columna de KPIs ahora solo compite en
+    altura con UN gráfico (el principal, no toda la pila), el desnivel es
+    mucho menor. Sin cambios de backend, sin tests nuevos (es CSS y
+    reordenar JSX existente, sin lógica nueva que testear); verificado en
+    Docker en desktop (los 3 gráficos secundarios de la demo pasan de 2
+    columnas confinadas a 3 a todo el ancho) y en mobile (siguen
+    apilándose en una sola columna, sin cambios ahí, como pidió Sd).
+    **Pendiente en el backlog, sin fecha**: ventanas libres, movibles y
+    redimensionables (fuera del alcance de "reordenar dentro de una
+    sección" que ya existe).
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -1146,8 +1171,11 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   regla gruesa, título en Newsreader (serif) y cuerpo en Source Sans 3;
   papel blanco cálido, acento violeta `--acento`; cifra protagonista grande
   (el primer KPI del spec) y el resto como cifras chicas; gráficos en orden
-  de lectura (el primero a lo ancho, el resto en grilla de 2); la planilla de
-  detalle (explorador) a lo ancho, debajo. Tokens en `estilos/tokens.css`,
+  de lectura: el primero (el "principal") al lado de los KPIs, el resto en
+  una grilla propia a TODO el ancho de la pantalla debajo (desde la fase 4,
+  para no dejar hueco: antes compartían columna angosta con los KPIs y ese
+  desnivel de altura dejaba un tercio de la pantalla sin uso); la planilla de
+  detalle (explorador) a lo ancho, debajo de todo. Tokens en `estilos/tokens.css`,
   con modo oscuro por `prefers-color-scheme`. Sin Tailwind, sin librería de
   componentes; CSS Modules por componente y utilidades mínimas en `base.css`.
 - **Gráficos con las reglas de dataviz**: ECharts directo (`echarts/core`,

@@ -109,7 +109,7 @@ export function Tablero() {
         <aside className={estilos.columnaCifras}>
           <Kpis workspaceId={workspaceId} spec={spec} filtros={filtrosSerializados} />
         </aside>
-        <section className={estilos.columnaGraficos} aria-label="Gráficos">
+        <section className={estilos.columnaGraficoPrincipal} aria-label="Gráfico principal">
           {graficoPrincipal && (
             <Grafico
               workspaceId={workspaceId}
@@ -124,27 +124,33 @@ export function Tablero() {
               ladoDestinoArrastre={arrastreGraficos.ladoDestino(graficoPrincipal.id)}
             />
           )}
-          {graficosSecundarios.length > 0 && (
-            <div className={estilos.grilla}>
-              {graficosSecundarios.map((grafico) => (
-                <Grafico
-                  key={grafico.id}
-                  workspaceId={workspaceId}
-                  grafico={grafico}
-                  filtros={filtrosSerializados}
-                  alto={220}
-                  filtrosSpec={spec.filtros}
-                  filtrosActivos={filtros}
-                  onCambiarFiltros={cambiarFiltros}
-                  arrastreHandle={arrastreGraficos.handleProps(grafico.id)}
-                  arrastreContenedor={arrastreGraficos.contenedorProps(grafico.id)}
-                  ladoDestinoArrastre={arrastreGraficos.ladoDestino(grafico.id)}
-                />
-              ))}
-            </div>
-          )}
         </section>
       </div>
+
+      {/* Fuera de la grilla de 2 columnas de arriba, a todo el ancho: la
+          columna de KPIs suele ser mas corta que el grafico principal, asi
+          que confinar los graficos secundarios a esa misma columna angosta
+          dejaba un tercio de la pantalla sin uso debajo de los KPIs (Sd lo
+          marcó). `auto-fit` reparte el ancho completo entre los que haya. */}
+      {graficosSecundarios.length > 0 && (
+        <div className={estilos.grilla}>
+          {graficosSecundarios.map((grafico) => (
+            <Grafico
+              key={grafico.id}
+              workspaceId={workspaceId}
+              grafico={grafico}
+              filtros={filtrosSerializados}
+              alto={220}
+              filtrosSpec={spec.filtros}
+              filtrosActivos={filtros}
+              onCambiarFiltros={cambiarFiltros}
+              arrastreHandle={arrastreGraficos.handleProps(grafico.id)}
+              arrastreContenedor={arrastreGraficos.contenedorProps(grafico.id)}
+              ladoDestinoArrastre={arrastreGraficos.ladoDestino(grafico.id)}
+            />
+          ))}
+        </div>
+      )}
 
       {spec.explorador.pestanias.length > 0 && (
         <section className={estilos.detalle} aria-label="Detalle">
