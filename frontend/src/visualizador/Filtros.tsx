@@ -5,10 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { pedir, rutaWorkspace } from "../compartido/api";
-import { cantidadActivos } from "../compartido/filtrosUrl";
+import { cantidadActivos, serializarFiltros } from "../compartido/filtrosUrl";
 import { formatearFecha, hoyIso } from "../compartido/formato";
 import type { FiltroSpec, FiltrosActivos, OpcionesSalida, SpecDashboard } from "../tipos";
 import estilos from "./Filtros.module.css";
+import { parametroFiltros } from "./Tablero";
 
 interface Props {
   workspaceId: number;
@@ -88,6 +89,7 @@ export function Filtros({ workspaceId, spec, filtros, onCambiar }: Props) {
                   <ControlLista
                     workspaceId={workspaceId}
                     filtro={filtro}
+                    filtrosActivos={filtros}
                     seleccion={valorLista(filtros, filtro.id)}
                     onCambiar={(valores) => onCambiar({ ...filtros, [filtro.id]: valores })}
                   />
@@ -113,10 +115,11 @@ export function Filtros({ workspaceId, spec, filtros, onCambiar }: Props) {
   );
 }
 
-function useOpciones(workspaceId: number, filtro: FiltroSpec) {
+function useOpciones(workspaceId: number, filtro: FiltroSpec, filtrosActivos: FiltrosActivos = {}) {
+  const serializados = serializarFiltros(filtrosActivos);
   return useQuery({
-    queryKey: ["opciones", workspaceId, filtro.id],
-    queryFn: () => pedir<OpcionesSalida>(rutaWorkspace(workspaceId, `/dashboard/filtros/${filtro.id}/opciones`)),
+    queryKey: ["opciones", workspaceId, filtro.id, serializados],
+    queryFn: () => pedir<OpcionesSalida>(rutaWorkspace(workspaceId, `/dashboard/filtros/${filtro.id}/opciones${parametroFiltros(serializados)}`)),
     staleTime: 5 * 60_000,
   });
 }
@@ -124,17 +127,20 @@ function useOpciones(workspaceId: number, filtro: FiltroSpec) {
 function ControlLista({
   workspaceId,
   filtro,
+  filtrosActivos,
   seleccion,
   onCambiar,
 }: {
   workspaceId: number;
   filtro: FiltroSpec;
+  filtrosActivos: FiltrosActivos;
   seleccion: string[];
   onCambiar: (valores: string[]) => void;
 }) {
-  const opciones = useOpciones(workspaceId, filtro);
+  const opciones = useOpciones(workspaceId, filtro, filtrosActivos);
   const [busqueda, setBusqueda] = useState("");
   const valores = (opciones.data?.valores ?? []).map(String);
+  const disponibles = opciones.data?.disponibles ? new Set(opciones.data.disponibles.map(String)) : null;
   const visibles = valores.filter((valor) => valor.toLowerCase().includes(busqueda.toLowerCase()));
 
   const alternar = (valor: string) => {
@@ -149,12 +155,16 @@ function ControlLista({
       <div className={estilos.opciones}>
         {opciones.isPending && <span className="mudo">Cargando opciones…</span>}
         {opciones.isError && <span className={estilos.error}>No pudimos cargar las opciones.</span>}
-        {visibles.map((valor) => (
-          <label key={valor} className={estilos.opcion}>
-            <input type="checkbox" checked={seleccion.includes(valor)} onChange={() => alternar(valor)} />
-            <span>{valor}</span>
-          </label>
-        ))}
+        {visibles.map((valor) => {
+          const noDisponible = disponibles !== null && !disponibles.has(valor);
+          return (
+            <label key={valor} className={`${estilos.opcion} ${noDisponible ? estilos.noDisponible : ""}`}>
+              <input type="checkbox" checked={seleccion.includes(valor)} onChange={() => alternar(valor)} />
+              <span>{valor}</span>
+              {noDisponible && <span className={estilos.pista}>(sin datos)</span>}
+            </label>
+          );
+        })}
         {opciones.isSuccess && !visibles.length && <span className="mudo">Nada coincide.</span>}
       </div>
       <div className={estilos.pieControl}>

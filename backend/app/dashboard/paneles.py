@@ -88,8 +88,8 @@ def consulta_explorador(
     return consulta, columnas
 
 
-def consulta_opciones_lista(campo: str) -> ConsultaSemantica:
-    return ConsultaSemantica(dimensiones=[DimensionConsulta(campo=campo, alias="valor")], limite=LIMITE_OPCIONES)
+def consulta_opciones_lista(campo: str, filtros: list[FiltroConsulta] | None = None) -> ConsultaSemantica:
+    return ConsultaSemantica(dimensiones=[DimensionConsulta(campo=campo, alias="valor")], filtros=filtros or [], limite=LIMITE_OPCIONES)
 
 
 def modelo_con_rango(modelo: ModeloSemantico, campo: str) -> tuple[ModeloSemantico, ConsultaSemantica]:

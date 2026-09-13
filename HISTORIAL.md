@@ -1395,3 +1395,78 @@ check constraint).
 `crear_metrica`) — 355 tests de backend en total. Frontend: build y
 `vitest` en verde, sin tests nuevos de componente (mismo criterio que el
 resto del wizard desde el paso 13, se verifica a mano en el navegador).
+
+## 2026-09-13 — Estado gris de Qlik, versión chica: opciones de filtro (v0.26.01)
+
+Este era el segundo de los dos pendientes que quedaron del pedido "actuá
+como Qlik" ("1) filtros y gráficos por chat, 2) aplicar filtro por chat,
+3) clickear un gráfico como selector"). El punto 3 tiene dos capas: el
+paso A (ya resuelto) hizo que clickear un gráfico o pedirle al chat
+aplicara un filtro; esta era la otra capa, el estado "gris" — en Qlik,
+cuando elegís un valor en un campo, los valores de OTROS campos que ya no
+tienen datos con esa elección se ven distintos (grisados), sin
+desaparecer. Antes de tocar nada se le preguntó a Sd por `AskUserQuestion`
+cuánto alcance darle de entrada: la versión completa (gráficos también en
+gris) o la chica (solo las opciones de los filtros de lista). Eligió la
+chica — es la pieza más chica y más útil primero, y la de los gráficos
+queda para más adelante.
+
+El diseño salió de mirar lo que ya existía: `GET
+/dashboard/filtros/{id}/opciones` (paso 6) siempre devolvió TODOS los
+valores del campo, sin mirar los demás filtros — "sin asociativo hasta la
+fase 4" decía el propio comentario del código. La pieza que faltaba era
+calcular, además del universo completo, qué subconjunto de esos valores
+sigue dando resultado si se aplican los OTROS filtros que están activos
+en el Tablero en ese momento (nunca el propio: elegir "Centro" en
+Sucursal no tiene por qué grisarse a si mismo).
+
+Del lado del backend fue chico porque toda la maquinaria ya existía:
+`ContextoDashboard` (que ya arma `self.filtros` a partir del `?filtros=`
+crudo) ganó `filtros_sin(filtro_id)`, que repite la misma conversión pero
+sacando esa clave del diccionario antes. `consulta_opciones_lista`
+(`dashboard/paneles.py`) ganó un parámetro opcional de filtros que pasa
+tal cual a la `ConsultaSemantica` de siempre — nada nuevo en el
+compilador, es la misma consulta de "valores distintos de un campo" que
+ya se usaba, solo que ahora puede llevar condiciones. El endpoint hace
+como mucho dos consultas: la de siempre (universo, sin filtros) y, solo
+si hay otros filtros activos, una segunda con esos otros filtros
+aplicados; si no hay otros activos, ni se corre la segunda — `disponibles`
+queda en `None`, que el frontend interpreta como "nada que grisar".
+
+Se probó con un caso elegido a propósito por ser 100% determinístico y no
+depender de que los datos sintéticos tengan tal o cual distribución al
+azar: cada vendedor de los datos de prueba pertenece a una sola sucursal
+(4 en Centro, 4 en Norte, 4 en Oeste). Filtrar por Sucursal = "Centro" y
+pedir las opciones de Vendedor tiene que dejar disponibles exactamente
+esos 4 nombres, nunca más ni menos — y al revés, filtrar por un vendedor
+de Centro tiene que dejar disponible solo "Centro" en Sucursal. El test
+nuevo verifica las dos direcciones más el caso de "un filtro no se
+restringe a si mismo" (con Sucursal ya en "Centro", pedir las opciones de
+Sucursal no tiene que grisar nada, porque los "otros filtros" para ese
+pedido están vacíos).
+
+Del lado del frontend, `visualizador/Filtros.tsx` ya recibía `filtros`
+(todos los activos) como prop desde el Tablero, así que alcanzó con
+pasarlo al `useOpciones` del control de lista (el de rango de fecha no
+cambió, a propósito: el alcance elegido fue solo las opciones de lista) y
+sumarlo a la `queryKey` para que el popover se recalcule solo cuando
+cambia OTRO filtro. Las opciones que `disponibles` no trae se pintan con
+el tono `--mudo` que ya usa el resto de la UI para texto secundario, más
+un "(sin datos)" alineado a la derecha — sin sacarlas de la lista ni
+impedir seleccionarlas, es una pista visual nomás, no una restricción
+dura (elegir igual una opción grisada es válido, el resultado
+simplemente va a dar cero filas, y eso ya se ve reflejado en los KPIs).
+
+Se probó de punta a punta en Docker con una organización descartable:
+sin ningún filtro activo, las tres sucursales aparecen normales; al
+activar Sucursal = "Centro", el popover de Vendedor muestra los 4 nombres
+de Centro sin marca y los otros 8 con "(sin datos)" en gris — exactamente
+la lista que predijo el test. Se ajustó la posición del texto (probado
+primero pegado al nombre, se veía apretado y cortaba línea en nombres
+largos; se lo pasó a alineado a la derecha con `margin-left: auto` y
+`white-space: nowrap`) después de verlo en el navegador.
+
+1 test nuevo de API (356 en total); sin tests nuevos de frontend, mismo
+criterio que el resto de esta pantalla desde el paso 7 (se verifica a
+mano en el navegador). Organización de prueba borrada por SQL crudo al
+terminar.

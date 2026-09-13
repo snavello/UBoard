@@ -589,6 +589,36 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     pedir nada más, con números correctos y el filtro de vendedor nulo
     incluido (LEFT JOIN, como corresponde). Organización de prueba
     borrada al terminar.
+  - Estado gris (versión chica, opciones de filtro): HECHO 2026-09-13
+    (v0.26.01). El otro pendiente de la fase, con el alcance que Sd eligió
+    por `AskUserQuestion`: grisar las OPCIONES de un filtro `lista` según
+    los demás filtros activos, no (todavía) los gráficos. `GET
+    /dashboard/filtros/{id}/opciones` sigue devolviendo el universo
+    completo en `valores` (sin cambios); gana `disponibles`, el
+    subconjunto que sigue dando resultado bajo los OTROS filtros activos
+    (nunca el propio: un filtro no se restringe a si mismo, por eso
+    `ContextoDashboard.filtros_sin(filtro_id)` excluye su propia entrada
+    del dict `{id_filtro: valor}` antes de recalcular); si no hay otros
+    filtros activos, `disponibles` es `None` (nada para grisar, se ahorra
+    la segunda consulta). `consulta_opciones_lista` ahora acepta esos
+    otros filtros y los pasa tal cual al compilador — sin una linea nueva
+    ahi, es la misma `ConsultaSemantica` de siempre. El frontend
+    (`visualizador/Filtros.tsx`) manda como `?filtros=` TODOS los activos
+    (el backend descarta el propio), agrega `filtrosSerializados` a la
+    `queryKey` para que el popover se recalcule solo al cambiar otro
+    filtro, y pinta las opciones que no están en `disponibles` en gris
+    (`--mudo`) con un "(sin datos)" alineado a la derecha, sin sacarlas de
+    la lista — se puede seleccionar igual, es solo una pista visual.
+    Alcance deliberadamente chico: sin cambios en `rango_fecha` (el
+    min/máx sigue global) ni en los gráficos (eso quedó explícitamente
+    aplazado). 1 test nuevo de API que prueba las dos direcciones con un
+    caso 100% determinista del dataset de prueba (cada vendedor pertenece
+    a una sola sucursal: filtrar por sucursal "Centro" deja disponibles
+    exactamente a sus 4 vendedores, y viceversa) más que filtrar no se
+    restringe a si mismo (356 tests en total). Verificado en Docker con
+    una organización descartable, incluida una captura de la consola del
+    navegador confirmando el texto y el color grises en la opción
+    correcta.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -961,8 +991,15 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   `rango_fecha` = `[desde, hasta]` (extremos abiertos con null), `lista` =
   `[valores]`. Se traducen en `dashboard/filtros.py` a filtros de consulta y
   se aplican a KPIs, gráficos, explorador y total del explorador por igual.
-  Las opciones de un filtro `lista` son todos los valores del campo (sin
-  asociativo hasta la fase 4); las de `rango_fecha`, mínimo y máximo.
+  Las opciones de un filtro `lista` son todos los valores del campo
+  (`valores`, el universo, siempre); desde la fase 4, además traen
+  `disponibles` — el subconjunto que sigue dando resultado bajo los OTROS
+  filtros activos, `None` si no hay otros activos (un filtro nunca se
+  restringe a si mismo: `ContextoDashboard.filtros_sin(filtro_id)`) — así
+  el frontend puede grisar sin sacar nada de la lista. Los gráficos
+  todavía no se pintan en gris (aplazado). Las opciones de `rango_fecha`
+  siguen siendo mínimo y máximo globales, sin restringir por los otros
+  filtros.
 - **Paneles** (`dashboard/paneles.py`): KPIs en UNA consulta (todas las
   métricas juntas); gráfico = una métrica por una dimensión (alias
   `dimension`), línea ordenada por la dimensión, barras y torta por la
@@ -1000,7 +1037,11 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - **Filtros activos en la URL** (`?filtros=<JSON>`, `filtrosUrl.ts`), mismo
   JSON que consume la API: clave de caché de TanStack Query y link
   compartible. Los chips abren un popover (lista con búsqueda y checkboxes,
-  o rango con dos fechas y atajos) y aplican al instante.
+  o rango con dos fechas y atajos) y aplican al instante. Desde la fase 4,
+  el popover de un filtro `lista` manda TODOS los filtros activos como
+  `?filtros=` al pedir sus opciones (el backend descarta el propio) y
+  pinta en `--mudo` con un "(sin datos)" las que `disponibles` no trae,
+  sin sacarlas de la lista — se puede seleccionar igual.
 - **Wizard de revisión** (`constructor/Revision.tsx`, paso 13): opera
   solo con las operaciones granulares del paso 12, nunca con `PUT /modelo`;
   cada botón dispara una y la vista se refresca invalidando `["modelo",

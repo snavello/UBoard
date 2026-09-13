@@ -16,6 +16,7 @@ from app.catalogo.sesion import obtener_sesion
 from app.catalogo.tablas import RolUsuario, Usuario, VersionSpec, Workspace
 from app.consultas import consultar
 from app.consultas.compilador import compilar
+from app.consultas.esquema import FiltroConsulta
 from app.consultas.ejecutor import contar
 from app.consultas.motor import fuentes_listas, obtener_motor
 from app.dashboard import operaciones, paneles
@@ -101,6 +102,11 @@ class OpcionesSalida(BaseModel):
     filtro: str
     tipo: str
     valores: list[Any] | None = None
+    # Subconjunto de `valores` que sigue dando resultado bajo los OTROS
+    # filtros activos (sin contar este); None si no hay otros filtros
+    # activos, o sea, no hay nada para grisar (asociativo, version chica:
+    # § Reglas del dashboard).
+    disponibles: list[Any] | None = None
     minimo: Any = None
     maximo: Any = None
 
@@ -114,10 +120,18 @@ class ContextoDashboard:
         self.version = operaciones.exigir_version_actual(sesion, workspace)
         self.spec = operaciones.spec_de(self.version)
         self.modelo, _ = operaciones.modelo_efectivo_actual(sesion, workspace)
-        self.filtros = a_filtros_de_consulta(self.spec, parsear_filtros_activos(filtros_crudos))
+        self.activos = parsear_filtros_activos(filtros_crudos)
+        self.filtros = a_filtros_de_consulta(self.spec, self.activos)
 
     def consultar(self, consulta, modelo: ModeloSemantico | None = None):
         return consultar(self.sesion, self.workspace, self.almacen, modelo or self.modelo, consulta)
+
+    def filtros_sin(self, filtro_id: str) -> list[FiltroConsulta]:
+        """Los filtros activos, salvo el propio: la base del filtrado
+        asociativo (§ Reglas del dashboard) es que un filtro nunca se
+        restringe a si mismo."""
+        otros = {clave: valor for clave, valor in self.activos.items() if clave != filtro_id}
+        return a_filtros_de_consulta(self.spec, otros)
 
 
 def contexto_dashboard(
@@ -334,14 +348,24 @@ def explorador(
 
 @router.get("/filtros/{filtro_id}/opciones", response_model=OpcionesSalida)
 def opciones_de_filtro(filtro_id: str, contexto: ContextoDashboard = Depends(contexto_dashboard)) -> OpcionesSalida:
-    """Valores posibles de un filtro. Sin filtrado asociativo (fase 4): son
-    todos los valores del campo, sin mirar los demas filtros activos."""
+    """Valores posibles de un filtro: el universo completo en `valores`, sin
+    mirar ningun filtro. Filtrado asociativo (fase 4, version chica): si hay
+    OTROS filtros activos, `disponibles` trae el subconjunto que todavia da
+    resultado bajo esos otros filtros (nunca el propio: un filtro no se
+    restringe a si mismo); si no hay otros activos, `disponibles` queda en
+    None (nada para grisar). Los graficos no se pintan todavia, solo esto."""
     filtro = contexto.spec.filtro(filtro_id)
     if filtro is None:
         raise ErrorApp("E-SPEC-04", f"filtro: {filtro_id!r}")
     if filtro.tipo == "lista":
         resultado = contexto.consultar(paneles.consulta_opciones_lista(filtro.campo))
-        return OpcionesSalida(filtro=filtro.id, tipo=filtro.tipo, valores=[fila[0] for fila in resultado.filas if fila[0] is not None])
+        valores = [fila[0] for fila in resultado.filas if fila[0] is not None]
+        otros_filtros = contexto.filtros_sin(filtro_id)
+        disponibles = None
+        if otros_filtros:
+            restringido = contexto.consultar(paneles.consulta_opciones_lista(filtro.campo, otros_filtros))
+            disponibles = [fila[0] for fila in restringido.filas if fila[0] is not None]
+        return OpcionesSalida(filtro=filtro.id, tipo=filtro.tipo, valores=valores, disponibles=disponibles)
     modelo_ampliado, consulta = paneles.modelo_con_rango(contexto.modelo, filtro.campo)
     resultado = contexto.consultar(consulta, modelo_ampliado)
     minimo, maximo = resultado.filas[0]

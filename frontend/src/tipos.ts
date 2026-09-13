@@ -372,6 +372,9 @@ export interface OpcionesSalida {
   filtro: string;
   tipo: "rango_fecha" | "lista";
   valores: unknown[] | null;
+  // Subconjunto de "valores" que sigue dando resultado bajo los OTROS
+  // filtros activos (nunca el propio); null si no hay otros activos.
+  disponibles: unknown[] | null;
   minimo: string | null;
   maximo: string | null;
 }

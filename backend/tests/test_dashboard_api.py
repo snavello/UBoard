@@ -98,13 +98,44 @@ def test_los_filtros_afectan_a_todo(cliente, dashboard):
 
 def test_opciones_de_filtros(cliente, dashboard):
     sucursal = cliente.get(_ruta(dashboard, "/filtros/f_sucursal/opciones")).json()
-    assert sucursal == {"filtro": "f_sucursal", "tipo": "lista", "valores": ["Centro", "Norte", "Oeste"], "minimo": None, "maximo": None}
+    assert sucursal == {
+        "filtro": "f_sucursal",
+        "tipo": "lista",
+        "valores": ["Centro", "Norte", "Oeste"],
+        "disponibles": None,
+        "minimo": None,
+        "maximo": None,
+    }
     medios = cliente.get(_ruta(dashboard, "/filtros/f_medio/opciones")).json()
     assert len(medios["valores"]) == 6
     fecha = cliente.get(_ruta(dashboard, "/filtros/f_fecha/opciones")).json()
     assert fecha["tipo"] == "rango_fecha"
     assert fecha["minimo"].startswith("2025-09") and fecha["maximo"].startswith("2026-08")
     assert cliente.get(_ruta(dashboard, "/filtros/f_nada/opciones")).json()["codigo"] == "E-SPEC-04"
+
+
+def test_opciones_grisan_segun_los_otros_filtros_activos(cliente, dashboard):
+    """Filtrado asociativo, version chica: cada vendedor pertenece a una
+    sola sucursal, asi que filtrar por sucursal tiene que restringir
+    (sin sacar de la lista) las opciones de vendedor a las de esa sucursal,
+    y viceversa. Nunca un filtro se restringe a si mismo."""
+    sin_otros_filtros = cliente.get(_ruta(dashboard, "/filtros/f_vendedor/opciones")).json()
+    assert sin_otros_filtros["disponibles"] is None
+    assert CENTRO <= set(sin_otros_filtros["valores"])
+    assert len(sin_otros_filtros["valores"]) > len(CENTRO)  # hay vendedores de otras sucursales tambien
+
+    con_sucursal = cliente.get(_ruta(dashboard, "/filtros/f_vendedor/opciones"), params={"filtros": _filtros(f_sucursal=["Centro"])}).json()
+    assert set(con_sucursal["disponibles"]) == CENTRO
+    assert set(con_sucursal["valores"]) == set(sin_otros_filtros["valores"])  # los demas vendedores siguen en la lista, solo grisados
+
+    # En la direccion inversa: filtrar por un vendedor de Centro restringe sucursal a Centro nomas
+    con_vendedor = cliente.get(_ruta(dashboard, "/filtros/f_sucursal/opciones"), params={"filtros": _filtros(f_vendedor=["María Pérez"])}).json()
+    assert con_vendedor["disponibles"] == ["Centro"]
+    assert set(con_vendedor["valores"]) == {"Centro", "Norte", "Oeste"}
+
+    # El filtro no se restringe a si mismo: con f_sucursal ya en Centro, sus propias opciones no se grisan
+    propio = cliente.get(_ruta(dashboard, "/filtros/f_sucursal/opciones"), params={"filtros": _filtros(f_sucursal=["Centro"])}).json()
+    assert propio["disponibles"] is None
 
 
 def test_explorador_paginado_y_ordenado(cliente, dashboard):
