@@ -524,11 +524,28 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     ventas en efectivo" activa el chip "Medio de pago: Efectivo" sin
     crear una versión nueva. 4 tests nuevos en el backend (349 en total);
     sin tests nuevos de frontend (se verifica en el navegador).
-  - Pendiente, sin planificar todavía: el estado "posible/excluido" en
-    gris (asociativo completo estilo Qlik), métricas con un filtro propio
-    (ej. "ventas en efectivo por vendedor" como una sola métrica), y un
-    diagrama visual del modelo (tipo DER) — este último pedido por Sd el
-    mismo día que el paso A, a evaluar aparte.
+  - Diagrama del modelo (tipo DER, pedido de Sd el mismo día que el paso
+    A): HECHO 2026-09-12 (v0.24.01). Pestaña nueva "Diagrama" en Modelo
+    (junto a Revisión, Avanzado y Dashboard). Todo del lado del frontend,
+    sin tocar el backend: `constructor/diagramaLayout.ts` (puro,
+    `calcularLayout(modelo)`) arma un layout por capas con BFS —
+    aprovecha que el grafo de relaciones efectivas nunca tiene ciclos
+    (lo exige la validación desde el paso 4), así que no hace falta una
+    librería de layout de grafos. Prioriza las entidades de "hechos" como
+    raíz de cada componente conexa; las apila una debajo de la otra si
+    hay más de una. `constructor/Diagrama.tsx` dibuja el resultado en SVG
+    a mano: cada entidad es una caja con cabecera (violeta si es
+    "hechos", gris si es "dimensión"), sus campos con un punto para la
+    clave primaria y el tipo semántico como caption muda a la derecha
+    (los campos `propuesta`/`rechazada` se ven atenuados/tachados); las
+    relaciones son conectores con notación "pata de gallo" (crow's foot)
+    de verdad: tres puntas del lado "muchos", dos marcas perpendiculares
+    del lado "uno", calculadas desde `cardinalidad` (`n:1`/`1:n`/`1:1`).
+    Todo con las variables de `tokens.css` de siempre, así que responde
+    al modo oscuro sin código extra. 7 tests de vitest nuevos para el
+    layout (17 en total); sin tests de backend (no se tocó). Verificado
+    en Docker y en modo oscuro con el modelo real de una organización de
+    prueba.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -970,6 +987,13 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   `es-AR`, llena el campo de texto (`interimResults` para ver el texto
   parcial mientras habla) y para ahí: la persona revisa y envía a mano,
   nunca se manda un mensaje solo por dictarlo.
+- **Diagrama del modelo** (`constructor/diagramaLayout.ts` +
+  `Diagrama.tsx`, pestaña "Diagrama" en Modelo): SVG a mano, sin librería
+  de diagramas. El layout es puro y se prueba con vitest
+  (`diagramaLayout.test.ts`); el dibujo (`Diagrama.tsx`) solo traduce esas
+  coordenadas a `<rect>`/`<text>`/`<path>`, sin lógica propia que valga la
+  pena testear aparte. Notación de relación "pata de gallo" real (tres
+  puntas = "muchos", dos marcas = "uno"), no flechas genéricas.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

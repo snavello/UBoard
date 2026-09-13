@@ -1,0 +1,28 @@
+.envoltorio { display: flex; flex-direction: column; gap: 14px; }
+
+.leyenda { display: flex; gap: 20px; align-items: center; font-size: 13px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; }
+.chip svg { stroke: var(--tinta-2); fill: none; stroke-width: 1.5; }
+
+.lienzo { overflow-x: auto; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--papel); padding: 8px; }
+
+.caja { fill: var(--superficie); stroke: var(--linea); stroke-width: 1; filter: drop-shadow(0 1px 2px rgba(28, 26, 23, 0.08)); }
+
+.cabeceraHechos { fill: var(--acento-suave); }
+.cabeceraDimension { fill: var(--superficie-2); }
+
+.tituloEntidad { font-family: var(--fuente-titulo); font-size: 15px; fill: var(--tinta); }
+.tipoEntidad { font-family: var(--fuente-texto); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; fill: var(--tinta-2); }
+
+.divisor { stroke: var(--linea); stroke-width: 1; }
+
+.puntoClave { fill: var(--acento); }
+.nombreCampo { font-family: var(--fuente-texto); font-size: 12px; fill: var(--tinta); }
+.tipoCampo { font-family: var(--fuente-texto); font-size: 10px; fill: var(--mudo); }
+
+.campoPropuesto .nombreCampo { fill: var(--tinta-2); }
+.campoRechazado .nombreCampo { fill: var(--mudo); text-decoration: line-through; }
+.campoRechazado .puntoClave { fill: var(--mudo); }
+
+.trazo { fill: none; stroke: var(--eje); stroke-width: 1.5; }
+.marcador { fill: none; stroke: var(--eje); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }

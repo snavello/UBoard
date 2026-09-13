@@ -13,11 +13,12 @@ import { Pestanias } from "../compartido/componentes/Pestanias";
 import { resumirDiff } from "../compartido/diff";
 import { formatearFecha } from "../compartido/formato";
 import { useSesion } from "../compartido/sesion";
+import { Diagrama } from "./Diagrama";
 import { Revision } from "./Revision";
 import type { ResultadoValidacion, VersionCompleta, VersionResumen } from "../tipos";
 import estilos from "./Modelo.module.css";
 
-type Pestania = "revision" | "modelo" | "dashboard";
+type Pestania = "revision" | "diagrama" | "modelo" | "dashboard";
 
 const DESCRIPCION: Record<"modelo" | "dashboard", { titulo: string; ayuda: string; sinVersion: string; plantilla: string }> = {
   modelo: {
@@ -47,6 +48,7 @@ export function Modelo() {
       <Pestanias
         pestanias={[
           { id: "revision", titulo: "Revisión" },
+          { id: "diagrama", titulo: "Diagrama" },
           { id: "modelo", titulo: "Avanzado" },
           { id: "dashboard", titulo: "Dashboard" },
         ]}
@@ -54,7 +56,8 @@ export function Modelo() {
         onCambiar={(id) => setActiva(id as Pestania)}
       />
       {activa === "revision" && <Revision workspaceId={workspaceId} />}
-      {activa !== "revision" && <EditorJson key={activa} artefacto={activa} workspaceId={workspaceId} />}
+      {activa === "diagrama" && <Diagrama workspaceId={workspaceId} />}
+      {activa !== "revision" && activa !== "diagrama" && <EditorJson key={activa} artefacto={activa as "modelo" | "dashboard"} workspaceId={workspaceId} />}
     </Marco>
   );
 }

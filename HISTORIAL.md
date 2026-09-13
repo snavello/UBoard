@@ -1239,3 +1239,66 @@ Quedan pendientes, sin planificar en detalle todavía: el estado
 "posible/excluido" en gris del modelo asociativo completo de Qlik, las
 métricas con un filtro propio (pedido 1 de Sd), y un diagrama visual del
 modelo tipo DER (pedido nuevo de Sd el mismo día, a evaluar aparte).
+
+## 2026-09-12 — Diagrama del modelo, tipo DER (v0.24.01)
+
+El mismo día del pedido de "actuar como Qlik", Sd pidió además evaluar un
+diagrama visual del modelo — entidades y relaciones, "que se vea
+profesional, agradable y elaborado", con la sugerencia de usar skills si
+hacía falta. Se consultó el skill `frontend-design` del repo antes de
+tocar código: su guía apunta a diseñar identidades visuales nuevas desde
+cero, y UBoard ya tiene la suya, fijada desde el paso 7 ("informe
+editorial": Newsreader serif, Source Sans 3, paleta de `tokens.css`). La
+decisión fue no inventar una identidad nueva para esta pantalla, sino
+tomar ese mismo lenguaje visual y ponerle un elemento propio y bien
+resuelto: la notación "pata de gallo" (crow's foot) de un diagrama
+entidad-relación de verdad, en vez de flechas genéricas — es la pieza que
+hace que un diagrama de cajas y líneas se sienta como un DER profesional
+y no como un dibujo improvisado.
+
+Todo el trabajo quedó del lado del frontend, sin tocar el backend en
+absoluto: el modelo semántico completo ya se puede pedir por `GET
+/modelo` desde la fase 1, no hacía falta un endpoint nuevo.
+
+`constructor/diagramaLayout.ts` es una función pura, `calcularLayout
+(modelo)`, que arma las posiciones de cada entidad y cada conector. La
+pieza que evitó tener que sumar una librería de layout de grafos (dagre,
+elkjs, lo que fuera) es una garantía que el modelo ya tenía desde el
+paso 4: la validación exige que el grafo de relaciones efectivas nunca
+tenga ciclos (`MOD-REL-CICLO`), así que siempre es un bosque. Con eso
+alcanza un BFS por capas desde las entidades de "hechos" (el centro
+natural de un esquema en estrella) para conseguir un layout jerárquico
+limpio, apilando una componente conexa debajo de la otra cuando hay más
+de una. Cada conector se calcula desde la fila exacta del campo FK hasta
+la fila exacta del campo PK, no solo entidad-a-entidad, para que la línea
+apunte al campo correcto adentro de la caja.
+
+`constructor/Diagrama.tsx` dibuja el resultado en SVG a mano: cada
+entidad es una caja con cabecera (violeta suave si es "hechos", gris si
+es "dimensión", con una sombra sutil), la clave primaria marcada con un
+punto, el tipo semántico de cada campo como caption chica a la derecha, y
+los campos `propuesta` o `rechazada` atenuados o tachados — la misma
+lógica de "no ocultar el estado real" que ya usa el semáforo del wizard,
+pero sin agregarle todos sus íconos, para no saturar el diagrama. La
+notación "pata de gallo" se arma con paths de SVG a mano: tres líneas que
+convergen en el borde de la caja para el lado "muchos", dos marcas
+perpendiculares para el lado "uno" — calculado a partir de `cardinalidad`
+(`n:1`, `1:n`, `1:1`), el mismo campo que ya usa el compilador para saber
+qué lado tiene que ser la clave primaria. Todo el color sale de las
+variables de `tokens.css` de siempre, así que el diagrama responde al
+modo oscuro sin ningún código extra — se verificó explícitamente
+alternando el tema en el navegador.
+
+Se agregó una pestaña "Diagrama" en Modelo, junto a Revisión, Avanzado y
+Dashboard, reusando la misma query (`["modelo", workspaceId]`) que ya
+usa Revisión — abrir el diagrama no dispara un pedido nuevo si el modelo
+ya está en caché.
+
+7 tests de vitest nuevos para `diagramaLayout.ts` (la parte pura y con
+valor real de probar: capas por BFS, qué lado de cada conector es
+"muchos"/"uno", qué campos quedan marcados como clave, que una entidad
+sin relaciones no rompe el layout) — 17 tests de frontend en total. El
+dibujo en sí (`Diagrama.tsx`) no tiene tests, es una traducción directa de
+coordenadas a SVG, sin lógica propia; se verificó a mano en el navegador,
+en claro y oscuro, contra el modelo real de una organización de prueba
+(borrada al terminar). Sin cambios de backend, sin tests nuevos ahí.
