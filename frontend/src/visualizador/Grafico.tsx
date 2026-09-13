@@ -23,9 +23,27 @@ interface Props {
   filtrosSpec: FiltroSpec[];
   filtrosActivos: FiltrosActivos;
   onCambiarFiltros: (filtros: FiltrosActivos) => void;
+  // Orden personal por arrastre (fase 4): un agarradero chico en la
+  // cabecera, no toda la figura, para no interferir con el click-to-filter
+  // del cuerpo del grafico. Sin esto (Modelo/Diagrama no lo pasan) el
+  // grafico se ve igual que siempre, sin agarradero.
+  arrastreHandle?: { draggable: true; onDragStart: (evento: React.DragEvent) => void; onDragEnd: () => void };
+  arrastreContenedor?: { onDragOver: (evento: React.DragEvent) => void; onDragLeave: () => void; onDrop: (evento: React.DragEvent) => void };
+  esDestinoArrastre?: boolean;
 }
 
-export function Grafico({ workspaceId, grafico, filtros, alto, filtrosSpec, filtrosActivos, onCambiarFiltros }: Props) {
+export function Grafico({
+  workspaceId,
+  grafico,
+  filtros,
+  alto,
+  filtrosSpec,
+  filtrosActivos,
+  onCambiarFiltros,
+  arrastreHandle,
+  arrastreContenedor,
+  esDestinoArrastre,
+}: Props) {
   const [comoTabla, setComoTabla] = useState(false);
   const tema = useTema();
   const consulta = useQuery({
@@ -51,18 +69,28 @@ export function Grafico({ workspaceId, grafico, filtros, alto, filtrosSpec, filt
   };
   const contenedor = useGrafico(opcion, filtroClickeable ? alClickear : undefined);
   return (
-    <figure className={`${estilos.grafico} ${consulta.isPlaceholderData ? estilos.atenuado : ""}`}>
+    <figure
+      className={`${estilos.grafico} ${consulta.isPlaceholderData ? estilos.atenuado : ""} ${esDestinoArrastre ? estilos.destinoArrastre : ""}`}
+      {...arrastreContenedor}
+    >
       <figcaption className={estilos.cabecera}>
         <div>
           <h3 className={estilos.titulo}>{datos?.titulo ?? grafico.titulo ?? grafico.metrica}</h3>
           {datos && <span className="mudo">{datos.metrica.nombre}</span>}
           {filtroClickeable && !comoTabla && <span className={`mudo ${estilos.pista}`}>Clickeá para filtrar por {filtroClickeable.etiqueta ?? filtroClickeable.campo}</span>}
         </div>
-        {datos && datos.filas.length > 0 && (
-          <button type="button" className="boton boton--texto boton--chico" onClick={() => setComoTabla((valor) => !valor)}>
-            {comoTabla ? "Ver gráfico" : "Ver tabla"}
-          </button>
-        )}
+        <div className={estilos.controles}>
+          {arrastreHandle && (
+            <span className={estilos.agarradero} {...arrastreHandle} title="Arrastrar para reordenar" aria-hidden="true">
+              ⠿
+            </span>
+          )}
+          {datos && datos.filas.length > 0 && (
+            <button type="button" className="boton boton--texto boton--chico" onClick={() => setComoTabla((valor) => !valor)}>
+              {comoTabla ? "Ver gráfico" : "Ver tabla"}
+            </button>
+          )}
+        </div>
       </figcaption>
 
       {consulta.isPending && <Esqueleto alto={alto} />}

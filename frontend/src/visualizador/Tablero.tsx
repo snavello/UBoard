@@ -7,10 +7,12 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Chat } from "../asistente/Chat";
 import { codigoDeError, pedir, rutaWorkspace } from "../compartido/api";
+import { useArrastreDeOrden } from "../compartido/arrastre";
 import { Aviso, AvisoError, ListaErrores } from "../compartido/componentes/Aviso";
 import { Cargando } from "../compartido/componentes/Cargando";
 import { Marco } from "../compartido/componentes/Marco";
 import { escribirFiltros, leerFiltros, serializarFiltros } from "../compartido/filtrosUrl";
+import { useOrdenPersonal } from "../compartido/ordenPersonal";
 import { useSesion } from "../compartido/sesion";
 import type { DashboardSalida, FiltrosActivos } from "../tipos";
 import { Explorador } from "./Explorador";
@@ -39,6 +41,13 @@ export function Tablero() {
   const cambiarFiltros = (nuevos: FiltrosActivos) => {
     setParametros(escribirFiltros(parametros, nuevos), { replace: true });
   };
+
+  // Los hooks van ANTES de los "return" de carga/error de mas abajo (reglas
+  // de los hooks: siempre el mismo orden en todos los renders). Con
+  // "graficos ?? []" cuando el dashboard todavia no llego, no hay nada para
+  // reordenar todavia y no pasa nada raro.
+  const [graficosOrdenados, moverGrafico] = useOrdenPersonal("graficos", workspaceId, dashboard.data?.contenido.graficos ?? [], (grafico) => grafico.id);
+  const arrastreGraficos = useArrastreDeOrden(moverGrafico);
 
   if (dashboard.isPending) {
     return (
@@ -71,8 +80,11 @@ export function Tablero() {
   }
 
   const spec = dashboard.data.contenido;
-  const graficoPrincipal = spec.graficos[0];
-  const graficosSecundarios = spec.graficos.slice(1);
+  // El primero de graficosOrdenados sigue siendo el protagonista de la
+  // seccion (mas grande, arriba): arrastrar otro grafico al principio lo
+  // promueve.
+  const graficoPrincipal = graficosOrdenados[0];
+  const graficosSecundarios = graficosOrdenados.slice(1);
 
   return (
     <Marco
@@ -109,6 +121,9 @@ export function Tablero() {
               filtrosSpec={spec.filtros}
               filtrosActivos={filtros}
               onCambiarFiltros={cambiarFiltros}
+              arrastreHandle={arrastreGraficos.handleProps(graficoPrincipal.id)}
+              arrastreContenedor={arrastreGraficos.contenedorProps(graficoPrincipal.id)}
+              esDestinoArrastre={arrastreGraficos.esDestino(graficoPrincipal.id)}
             />
           )}
           {graficosSecundarios.length > 0 && (
@@ -123,6 +138,9 @@ export function Tablero() {
                   filtrosSpec={spec.filtros}
                   filtrosActivos={filtros}
                   onCambiarFiltros={cambiarFiltros}
+                  arrastreHandle={arrastreGraficos.handleProps(grafico.id)}
+                  arrastreContenedor={arrastreGraficos.contenedorProps(grafico.id)}
+                  esDestinoArrastre={arrastreGraficos.esDestino(grafico.id)}
                 />
               ))}
             </div>

@@ -1639,3 +1639,104 @@ es exactamente el de antes, y que un turno con un rol inválido es
 que el resto de esta pantalla desde el paso 20, se verifica a mano en el
 navegador. Organización de prueba (`PruebaMemoriaChat`) borrada al
 terminar.
+
+## 2026-09-13 — Orden personal por arrastre (v0.28.01)
+
+Sd trajo una observación de diseño, no un bug: "en el dashboard todos los
+datos y gráficos tienen un orden establecido bastante caótico. Sería
+bueno que cada uno de ellos pudiera ser movido y reubicado en pantalla
+conformando una especie de template del usuario". Antes de escribir una
+línea de código se acotó el alcance con dos preguntas cortas, en prosa
+(no hacía falta `AskUserQuestion`, eran decisiones chicas):
+
+1. **¿Arrastre libre en una grilla, o reordenar dentro de cada sección?**
+   Se recomendó lo segundo: la dirección visual del paso 7 ("informe
+   editorial") tiene una jerarquía de lectura deliberada — cifra
+   protagonista grande, gráficos en orden, planilla de detalle abajo — y
+   mezclar KPIs con gráficos en una grilla libre la habría roto. Sd
+   confirmó.
+2. **¿El orden viaja en el spec versionado (compartido, sincronizado
+   entre dispositivos) o queda como preferencia personal en el navegador
+   (simple, sin sincronizar)?** Se recomendó la preferencia personal: el
+   spec de fase 1 es la estructura del dashboard, compartida por toda la
+   organización, con su propio historial de versiones — mezclar ahí "cómo
+   prefiero verlo yo" con "cómo está armado el dashboard" habría
+   ensuciado ese historial con un ruido nuevo por cada arrastre. Sd contestó
+   "vamos por la simple".
+
+Con las dos decisiones tomadas, **no hizo falta tocar el backend en
+absoluto**: todo el trabajo quedó del lado del frontend.
+
+`compartido/ordenPersonal.ts` tiene el hook `useOrdenPersonal(tipo,
+workspaceId, items, idDe)`: lee y guarda el orden en `localStorage`, con
+una clave por tipo de bloque, workspace y usuario
+(`uboard:orden:{tipo}:{workspaceId}:{usuarioId}`) para que dos personas
+en la misma compu no se pisen el orden. La parte que vale la pena probar
+de verdad —qué pasa si el spec cambió desde la última vez (un KPI nuevo,
+un gráfico que ya no existe)— se separó en dos funciones puras,
+`combinarOrden` (mezcla lo guardado con lo actual: los conocidos
+mantienen su lugar relativo, los nuevos van al final, los que
+desaparecieron se ignoran) y `moverEnOrden` (mueve un id justo antes de
+otro), siguiendo el mismo patrón que ya se usó para `diagramaLayout.ts`
+en la fase 4: la lógica pura separada del hook que toca el navegador, así
+se puede probar con vitest sin simular React ni el DOM.
+
+`compartido/arrastre.ts` tiene `useArrastreDeOrden(mover)`, que separa
+las props de dos roles: el "agarradero" (el elemento chico que arranca el
+arrastre, con `draggable` de verdad) y el "contenedor" (el elemento
+grande que recibe el `drop`). La separación no es capricho: los gráficos
+ya tienen su propio manejo de mouse adentro (el click-to-filter del paso
+A, sobre el canvas de ECharts), así que hacer arrastrable la figura
+ENTERA hubiera arriesgado interferir con esos clicks. La solución fue un
+agarradero chico (`⠿`) en la cabecera del gráfico, al lado de "Ver
+tabla", lejos del cuerpo donde vive el click-to-filter — el contenedor
+que recibe el drop sigue siendo la figura completa, para que soltar en
+cualquier parte de la tarjeta funcione. En los KPIs y en las pestañas del
+explorador, que no tienen nada interactivo adentro, el mismo elemento
+sirve de agarradero y de contenedor a la vez, sin necesidad de esa
+separación.
+
+`Kpis.tsx`: el orden se aplica a la lista COMPLETA antes de separar
+protagonista y resto, así que arrastrar cualquier KPI chico al lugar de
+la cifra grande lo promueve (y el que estaba ahí baja a la grilla).
+`Tablero.tsx`: mismo patrón con `spec.graficos` antes de separar el
+gráfico principal (ancho, arriba) de los secundarios (grilla de 2).
+`Explorador.tsx`: el orden se aplica a las pestañas antes de pasarlas al
+componente compartido `Pestanias.tsx`, que ahora acepta un prop opcional
+`arrastre` — opcional a propósito, porque el mismo componente también
+arma las pestañas FIJAS de Modelo (Revisión/Diagrama/Avanzado/Dashboard),
+que no tienen que ser arrastrables; sin ese prop, `Pestanias` se comporta
+exactamente igual que antes.
+
+Un bug real, encontrado ANTES de cerrar el paso (no llegó a Sd): al
+verificar en Docker, el Tablero explotaba con un error de React (#310) en
+cuanto cargaba. La causa fue una violación clásica de las reglas de los
+hooks: `useOrdenPersonal` y `useArrastreDeOrden` habían quedado
+DESPUÉS de los `return` tempranos de `Tablero.tsx` (los de "cargando" y
+"hubo un error"), así que en el render de éxito el componente llamaba más
+hooks que en los renders de carga/error — React lo detecta y tira ese
+error específico. Se solucionó subiendo las dos llamadas arriba de todo,
+antes de cualquier `return`, usando `dashboard.data?.contenido.graficos
+?? []` mientras el dashboard todavía no llegó (un array vacío no rompe
+nada, simplemente no hay nada para reordenar todavía). Quedó anotada la
+regla en `CLAUDE.md` para no repetirlo la próxima vez que se agregue un
+hook a un componente con `return`s tempranos.
+
+Verificado en Docker contra la demo real (sin alterarla — el orden vive
+en `localStorage` del navegador, nunca toca la base de la organización):
+arrastrar "Unidades vendidas" al lugar de la cifra protagonista la
+promovió, bajando "Total ventas" a la grilla chica; arrastrar el gráfico
+"Cobros por medio de pago" al lugar del gráfico principal lo agrandó;
+arrastrar la pestaña "Pagos" al principio del explorador la reordenó; el
+orden sobrevivió a un F5 (se lee de `localStorage` en el primer render);
+y — la prueba más importante — el click-to-filter sobre una barra de
+"Top vendedores" siguió aplicando el filtro exactamente igual que antes,
+confirmando que el agarradero separado no interfiere con el canvas.
+
+10 tests nuevos de vitest para `combinarOrden` y `moverEnOrden` (27 en
+total: casos de mezcla con elementos nuevos/eliminados, mover hacia
+adelante y hacia atrás, mover al propio lugar, origen o destino
+inexistente). Sin tests de componente — se verifica arrastrando de
+verdad en el navegador, mismo criterio que el resto de esta pantalla
+desde el paso 7. Sin cambios de backend: la suite sigue en 361 tests,
+sin cambios desde el paso anterior.

@@ -1,3 +1,4 @@
+import type { ArrastreDeOrden } from "../arrastre";
 import estilos from "./Pestanias.module.css";
 
 export interface Pestania {
@@ -11,9 +12,14 @@ interface Props {
   activa: string;
   onCambiar: (id: string) => void;
   derecha?: React.ReactNode;
+  // Orden personal por arrastre (fase 4): opcional, para no afectar a los
+  // demas usos de este componente (las pestanias fijas de Modelo). Una
+  // pestania no tiene interaccion propia adentro, asi que el boton entero
+  // sirve de agarradero y de contenedor a la vez.
+  arrastre?: ArrastreDeOrden;
 }
 
-export function Pestanias({ pestanias, activa, onCambiar, derecha }: Props) {
+export function Pestanias({ pestanias, activa, onCambiar, derecha, arrastre }: Props) {
   return (
     <div className={estilos.barra} role="tablist">
       {pestanias.map((pestania) => (
@@ -22,8 +28,9 @@ export function Pestanias({ pestanias, activa, onCambiar, derecha }: Props) {
           type="button"
           role="tab"
           aria-selected={pestania.id === activa}
-          className={`${estilos.pestania} ${pestania.id === activa ? estilos.activa : ""}`}
+          className={`${estilos.pestania} ${pestania.id === activa ? estilos.activa : ""} ${arrastre?.esDestino(pestania.id) ? estilos.destinoArrastre : ""}`}
           onClick={() => onCambiar(pestania.id)}
+          {...(arrastre ? { ...arrastre.handleProps(pestania.id), ...arrastre.contenedorProps(pestania.id) } : {})}
         >
           {pestania.titulo}
           {pestania.extra && <span className={estilos.extra}>{pestania.extra}</span>}

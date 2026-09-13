@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { pedir, rutaWorkspace } from "../compartido/api";
+import { useArrastreDeOrden } from "../compartido/arrastre";
 import { AvisoError } from "../compartido/componentes/Aviso";
 import { Cargando } from "../compartido/componentes/Cargando";
 import { Paginador } from "../compartido/componentes/Paginador";
 import { Pestanias } from "../compartido/componentes/Pestanias";
 import { esNumerico, formatearCelda } from "../compartido/formato";
-import type { ExploradorSalida, SpecDashboard } from "../tipos";
+import { useOrdenPersonal } from "../compartido/ordenPersonal";
+import type { ExploradorSalida, PestaniaSpec, SpecDashboard } from "../tipos";
 import estilos from "./Explorador.module.css";
 
 interface Props {
@@ -23,7 +25,10 @@ function capitalizar(texto: string): string {
 }
 
 export function Explorador({ workspaceId, spec, filtros }: Props) {
-  const pestanias = spec.explorador.pestanias;
+  // El orden de las pestanias es una preferencia personal (arrastrar y
+  // soltar, guardada en este navegador), no la estructura del spec.
+  const [pestanias, moverPestania] = useOrdenPersonal("pestanias", workspaceId, spec.explorador.pestanias, (pestania: PestaniaSpec) => pestania.entidad);
+  const arrastrePestanias = useArrastreDeOrden(moverPestania);
   const [activa, setActiva] = useState(pestanias[0]?.entidad ?? "");
   const [pagina, setPagina] = useState(1);
   const [orden, setOrden] = useState<{ por: string; direccion: "asc" | "desc" } | null>(null);
@@ -67,6 +72,7 @@ export function Explorador({ workspaceId, spec, filtros }: Props) {
         activa={activa}
         onCambiar={cambiarPestania}
         derecha={datos ? `${datos.total.toLocaleString("es-AR")} filas` : undefined}
+        arrastre={arrastrePestanias}
       />
       {consulta.isPending && <Cargando texto="Buscando filas…" />}
       {consulta.isError && <AvisoError error={consulta.error} titulo="No pudimos cargar el detalle" />}

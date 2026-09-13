@@ -664,6 +664,49 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     pedido real a mitad de camino. 5 tests nuevos de backend (361 en
     total); sin tests nuevos de frontend (se verifica en el navegador,
     mismo criterio que el resto de esta pantalla).
+  - Orden personal por arrastre (KPIs, gráficos, pestañas del explorador):
+    HECHO 2026-09-13 (v0.28.01). Pedido de Sd: "todos los datos y gráficos
+    tienen un orden bastante caótico... sería bueno que cada uno pudiera
+    ser movido y reubicado, una especie de template del usuario". Antes de
+    tocar código se acotó el alcance con dos preguntas cortas (no
+    `AskUserQuestion`, alcanzó con prosa): (1) ¿arrastre libre en una
+    grilla, o reordenar dentro de cada sección? Se recomendó lo segundo
+    (no romper la jerarquía de lectura del paso 7: cifra protagonista,
+    gráficos en orden, planilla abajo) y Sd lo confirmó; (2) ¿guardado en
+    el spec versionado (compartido, sincronizado) o como preferencia
+    personal en el navegador (simple, sin sincronizar)? Sd eligió la
+    simple. **No hay cambios de backend**: el orden no toca el spec ni
+    genera versiones, es pura preferencia de cliente.
+    `compartido/ordenPersonal.ts` (`useOrdenPersonal`, con `combinarOrden`
+    y `moverEnOrden` separadas como funciones puras, testeadas aparte):
+    guarda el orden en `localStorage` con clave
+    `uboard:orden:{tipo}:{workspaceId}:{usuarioId}`; si el spec trae un
+    elemento nuevo desde la última vez se acomoda al final, si uno
+    desapareció se lo ignora, sin romper el resto del orden guardado.
+    `compartido/arrastre.ts` (`useArrastreDeOrden`) separa las props del
+    "agarradero" (el elemento chico `draggable`, dragstart/dragend) de las
+    del "contenedor" (dragover/drop, más grande): en los gráficos hace
+    falta esa separación para no interferir con el click-to-filter del
+    cuerpo (paso A) — un agarradero `⠿` chico en la cabecera, al lado de
+    "Ver tabla", en vez de toda la figura arrastrable. En los KPIs y las
+    pestañas del explorador, sin interacción propia adentro, el mismo
+    elemento sirve de agarradero y contenedor. `Pestanias.tsx` (compartido
+    con las pestañas fijas de Modelo) ganó un prop `arrastre` opcional,
+    sin afectar a quien no lo pasa. Bug real encontrado y corregido antes
+    de verificar en el navegador: en `Tablero.tsx` los hooks nuevos
+    quedaron después de los `return` de carga/error (violación de las
+    reglas de los hooks), y React tiraba el error #310 apenas cargaba el
+    Tablero — se solucionó moviéndolos arriba de todo, con
+    `dashboard.data?.contenido.graficos ?? []` mientras no hay datos
+    todavía. 10 tests nuevos de vitest para `combinarOrden`/`moverEnOrden`
+    (27 en total); sin tests de componente (se verifica a mano arrastrando
+    de verdad en el navegador, mismo criterio de siempre). Probado en
+    Docker contra la demo real (sin alterarla: el orden vive en
+    `localStorage`, no toca la base): arrastrar un KPI chico al lugar de
+    la cifra protagonista lo promueve; arrastrar un gráfico secundario al
+    lugar del principal lo agranda; arrastrar una pestaña del explorador
+    la reordena; el click-to-filter y las pestañas fijas de Modelo siguen
+    andando exactamente igual que antes.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -1168,6 +1211,22 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   coordenadas a `<rect>`/`<text>`/`<path>`, sin lógica propia que valga la
   pena testear aparte. Notación de relación "pata de gallo" real (tres
   puntas = "muchos", dos marcas = "uno"), no flechas genéricas.
+- **Orden personal por arrastre** (`compartido/ordenPersonal.ts` +
+  `compartido/arrastre.ts`, desde la fase 4): KPIs, gráficos y pestañas
+  del explorador se pueden reordenar arrastrando, DENTRO de cada sección
+  (no hay grilla libre entre secciones distintas). Es una preferencia de
+  esta persona en este navegador para este workspace
+  (`localStorage["uboard:orden:{tipo}:{workspaceId}:{usuarioId}"]`),
+  nunca el spec versionado — arrastrar no crea una versión ni lo ve nadie
+  más. El primero de la lista sigue siendo el elemento "protagonista" de
+  su sección (cifra grande, gráfico ancho): arrastrar otro al principio
+  lo promueve. Drag and drop nativo del navegador, sin librería; en los
+  gráficos el agarradero (`⠿`, en la cabecera) está separado del
+  contenedor a propósito, para no interferir con el click-to-filter del
+  cuerpo del gráfico (paso A). **Ojo con las reglas de los hooks**: los
+  hooks de esto (y cualquier hook nuevo) van ANTES de cualquier `return`
+  temprano de carga/error del componente, nunca después — ya causó un
+  error real (#310) en `Tablero.tsx` la primera vez.
 
 ## Método de trabajo
 - Preguntar antes de decidir ante cualquier ambigüedad; no asumir. Fases

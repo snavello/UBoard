@@ -1,6 +1,6 @@
 .kpis { display: flex; flex-direction: column; gap: 22px; transition: opacity 150ms; }
 .atenuado { opacity: 0.55; }
-.protagonista { display: flex; flex-direction: column; gap: 6px; }
+.protagonista { position: relative; display: flex; flex-direction: column; gap: 6px; }
 .etiqueta { font-size: 13px; color: var(--tinta-2); }
 .cifraGrande {
   font-family: var(--fuente-titulo);
@@ -14,6 +14,16 @@
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px;
   margin: 0; padding-top: 18px; border-top: 1px solid var(--linea);
 }
-.kpi { display: flex; flex-direction: column; gap: 2px; }
+.kpi { position: relative; display: flex; flex-direction: column; gap: 2px; }
 .kpi dd { margin: 0; }
 .cifra { font-family: var(--fuente-titulo); font-size: clamp(22px, 1.9vw, 30px); line-height: 1.1; white-space: nowrap; }
+
+/* Arrastrar para reordenar (preferencia personal, ver compartido/ordenPersonal.ts) */
+.agarradero {
+  position: absolute; top: -2px; right: -2px;
+  padding: 2px 4px; font-size: 13px; color: var(--mudo);
+  cursor: grab; border-radius: 4px; line-height: 1;
+}
+.agarradero:hover { background: var(--superficie-2); color: var(--tinta-2); }
+.agarradero:active { cursor: grabbing; }
+.destinoArrastre { outline: 2px dashed var(--acento); outline-offset: 4px; border-radius: var(--radio); }
