@@ -493,7 +493,8 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
   forma ad-hoc a pedido directo de Sd (todavía sin el documento de
   lectura/dudas/decisiones/plan completo que llevan las fases anteriores,
   por el tamaño acotado del primer paso; si la fase crece, corresponde
-  escribirlo).
+  escribirlo). Checklist de aceptación en
+  [`docs/fase4-aceptacion.md`](docs/fase4-aceptacion.md).
   - Paso A (click-to-filter + el asistente aplica un filtro existente):
     HECHO 2026-09-12 (v0.23.01). Investigado primero el patrón del panel
     sindical de Mi Trabajo (repo `validador-demo`) que Sd pidió tomar de
@@ -619,6 +620,16 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     una organización descartable, incluida una captura de la consola del
     navegador confirmando el texto y el color grises en la opción
     correcta.
+  - Integración y aceptación: HECHO 2026-09-13 (v0.26.02). Checklist con
+    evidencia en
+    [`docs/fase4-aceptacion.md`](docs/fase4-aceptacion.md): corrida
+    combinada en Docker tocando las cuatro piezas de la fase en la misma
+    sesión (diagrama, click-to-filter, estado gris de un filtro
+    restringido por otro, el asistente aplicando un filtro), no cada una
+    aislada como en las verificaciones de cada paso. Sin cambios de
+    código; organización de prueba borrada al terminar. **Fase 4 completa,
+    a la espera de que Sd la acepte** (junto con la fase 3, que había
+    quedado pendiente de esa misma confirmación desde el paso 22).
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):

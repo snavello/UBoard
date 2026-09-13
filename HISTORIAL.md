@@ -1470,3 +1470,59 @@ largos; se lo pasó a alineado a la derecha con `margin-left: auto` y
 criterio que el resto de esta pantalla desde el paso 7 (se verifica a
 mano en el navegador). Organización de prueba borrada por SQL crudo al
 terminar.
+
+## 2026-09-13 — Fase 4: integración y aceptación (v0.26.02)
+
+Con las cuatro piezas de la fase hechas (paso A, diagrama del modelo,
+métricas con un filtro propio, estado gris de las opciones), tocaba
+cerrar la fase con el mismo tipo de checklist que las fases 1, 2 y 3
+—aunque, a diferencia de esas, la fase 4 no arrancó con un documento de
+lectura/dudas/plan (fue ad-hoc, a pedido de Sd en medio de otra sesión),
+así que el "criterio de aceptación" no salía de un §9 escrito de
+antemano. Se armó revisando qué decía la especificación original sobre
+esto: desde el §1, UBoard siempre iba a proponer un "dashboard
+asociativo", y el §6 (paso del visualizador) ya describía en detalle el
+mecanismo de verde/gris propagado por el grafo de relaciones — esta fase
+entrega una primera porción real de eso, no la versión completa que
+imaginaba la especificación (que hablaba incluso de un módulo
+`asociativo/` propio con cache por combinación de filtros).
+
+En vez de repetir las verificaciones aisladas que ya se habían hecho paso
+por paso (cada una documentada en su propia entrada de este archivo), la
+aceptación se probó con una corrida COMBINADA: una sola organización
+descartable, una sola sesión de navegador, tocando las cuatro piezas
+seguidas para confirmar que siguen andando juntas y no solo por
+separado. Diagrama del modelo (las 5 entidades del dataset de prueba,
+notación pata de gallo); click en la barra de "Diego López" en "Top
+vendedores" (filtró el dashboard entero de 3.000 a 261 ventas); con ese
+filtro activo, el popover de "Sucursal" mostró "Oeste" limpio y
+"Centro"/"Norte" grisados — Diego López es justamente de Oeste en los
+datos de prueba, así que el gris cayó exactamente donde tenía que caer;
+y por último, sacando el filtro de vendedor, pedirle al chat "aplicá el
+filtro de medio de pago efectivo" lo aplicó bien (`aplicar_filtro`, sin
+crear una versión nueva).
+
+Un detalle técnico de esta sesión, no del código: al reproducir el
+click-to-filter para la corrida de referencia, el primer intento con
+varias coordenadas no encontró la barra — resultó ser que las
+coordenadas usadas (con `resize_window` a un tamaño grande) caían sobre
+el área de las ETIQUETAS de vendedor del eje, no sobre las barras mismas
+(la etiqueta no dispara el evento de click de una serie de ECharts, solo
+la barra sí). Se resolvió tomando una captura real de la pantalla,
+midiendo a ojo dónde caía la barra dentro del canvas, y recién ahí
+calculando el punto para el evento sintético — la técnica de siempre
+(`MouseEvent` disparado a mano vía `getBoundingClientRect`, del paso A)
+seguía siendo válida, solo hacía falta apuntar al lugar correcto.
+
+Se escribió [`docs/fase4-aceptacion.md`](fase4-aceptacion.md) con el
+detalle completo, una tabla de 10 criterios (todos ✅) y los pendientes
+conocidos que quedan fuera de esta fase a propósito (el gris completo de
+Qlik en los gráficos, la propagación por el grafo con cache que imaginaba
+la especificación). De paso quedó anotado que la fase 3 tampoco tiene
+todavía un "acepto" explícito de Sd — el trabajo siguió derecho hacia la
+fase 4 sin esa confirmación formal — por si quiere cerrar las dos juntas.
+
+Sin cambios de código en este paso (solo el documento de aceptación y la
+verificación). 356 tests de backend, build y 17 de vitest sin cambios.
+Organización de prueba (`PruebaAceptacionFase4`) borrada por SQL crudo al
+terminar; la demo no se tocó.
