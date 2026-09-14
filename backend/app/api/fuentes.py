@@ -16,8 +16,10 @@ from app.api.tareas import TareaSalida, a_tarea_salida
 from app.api.workspaces import workspace_del_usuario
 from app.calidad import ReporteCalidad, calcular_reporte
 from app.catalogo.sesion import obtener_sesion
-from app.catalogo.tablas import EstadoFuente, Fuente, RolUsuario, Usuario, Workspace
+from app.catalogo.tablas import EstadoFuente, EstadoTarea, Fuente, RolUsuario, Tarea, Usuario, Workspace
 from app.consultas.motor import fuentes_listas, obtener_motor
+from app.inferencia.tarea import TIPO_TAREA_PROPONER_ESTRUCTURA
+from app.ingesta.estructura import RecetaTexto
 from app.ingesta.procesador import eliminar_fuente, validar_extension
 from app.ingesta.tarea import TIPO_TAREA_INGESTA
 from app.modelo import operaciones as modelo_operaciones
@@ -141,6 +143,84 @@ async def subir_archivos(
         )
         tareas.append(a_tarea_salida(tarea))
     return tareas
+
+
+class ConfirmarEstructuraEntrada(BaseModel):
+    tarea_id: str
+    receta: RecetaTexto
+
+
+@router.post("/estructura/proponer", response_model=TareaSalida, status_code=status.HTTP_202_ACCEPTED)
+async def proponer_estructura(
+    archivo: UploadFile = File(..., description="Texto sin delimitador estandar: ancho fijo u otro patron repetido"),
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+    almacen: AlmacenArchivos = Depends(obtener_almacen),
+    cola: ColaTareas = Depends(obtener_cola),
+) -> TareaSalida:
+    """Primer paso de texto estructurado (fase 4): guarda el archivo tal
+    cual (como una subida normal) y encola la propuesta de Claude. NO
+    ingesta nada todavia -- el resultado de la tarea trae `receta` para
+    revisar (y eventualmente ajustar) antes de `.../estructura/confirmar`."""
+    nombre_archivo = archivo.filename or "archivo"
+    contenido = await archivo.read()
+    limite = obtener_configuracion().tamanio_maximo_archivo_mb * 1024 * 1024
+    if len(contenido) > limite:
+        raise ErrorApp("E-ING-02", f"{nombre_archivo}: {len(contenido)} bytes")
+    if not contenido.strip():
+        raise ErrorApp("E-ING-03", f"archivo: {nombre_archivo!r}")
+
+    ruta_original = ruta_subida_original(workspace.organizacion_id, workspace.id, uuid.uuid4().hex, nombre_archivo)
+    almacen.guardar(ruta_original, contenido)
+    tarea = encolar_tarea(
+        sesion,
+        cola,
+        tipo=TIPO_TAREA_PROPONER_ESTRUCTURA,
+        parametros={"ruta_original": ruta_original, "nombre_archivo": nombre_archivo},
+        workspace=workspace,
+        usuario=usuario,
+    )
+    return a_tarea_salida(tarea)
+
+
+@router.post("/estructura/confirmar", response_model=TareaSalida, status_code=status.HTTP_202_ACCEPTED)
+def confirmar_estructura(
+    entrada: ConfirmarEstructuraEntrada,
+    workspace: Workspace = Depends(workspace_del_usuario),
+    usuario: Usuario = Depends(exigir_rol(RolUsuario.CONSTRUCTOR)),
+    sesion: Session = Depends(obtener_sesion),
+    cola: ColaTareas = Depends(obtener_cola),
+) -> TareaSalida:
+    """Segundo paso: con la receta ya revisada por la persona (tal cual la
+    propuso Claude, o ajustada), dispara la ingesta real -- la misma tarea
+    `ingesta.procesar_archivo` de una subida normal, con `receta` como
+    parametro extra. `ruta_original`/`nombre_archivo` se leen del lado del
+    servidor desde la tarea de propuesta (nunca se confia en una ruta de
+    archivo que mande el cliente)."""
+    tarea_propuesta = sesion.scalar(
+        select(Tarea).where(
+            Tarea.id == entrada.tarea_id,
+            Tarea.workspace_id == workspace.id,
+            Tarea.tipo == TIPO_TAREA_PROPONER_ESTRUCTURA,
+        )
+    )
+    if tarea_propuesta is None or tarea_propuesta.estado != EstadoTarea.TERMINADA:
+        raise ErrorApp("E-TAREA-01", f"id: {entrada.tarea_id}")
+
+    tarea = encolar_tarea(
+        sesion,
+        cola,
+        tipo=TIPO_TAREA_INGESTA,
+        parametros={
+            "ruta_original": tarea_propuesta.parametros["ruta_original"],
+            "nombre_archivo": tarea_propuesta.parametros["nombre_archivo"],
+            "receta": entrada.receta.model_dump(mode="json"),
+        },
+        workspace=workspace,
+        usuario=usuario,
+    )
+    return a_tarea_salida(tarea)
 
 
 @router.get("/{fuente_id}", response_model=FuenteSalida)

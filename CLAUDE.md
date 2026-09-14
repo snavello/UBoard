@@ -907,6 +907,97 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     tocar código; queda anotado por si en algún momento vale la pena
     hacer que el desempate prefiera el ancho más frecuente ENTRE los
     candidatos de mayor ancho, no cualquiera.
+  - Texto estructurado con parser propuesto por Claude: HECHO 2026-09-14
+    (v0.32.01). Cuarto pendiente de "Fase 4 — Profundidad". Alcance
+    ampliado a mitad de la lectura (pedido explícito de Sd): no es un
+    parser especifico de ancho fijo, es general — reportes de ANCHO FIJO
+    (offsets por posición) o texto con un patrón repetido por línea sin
+    delimitador estándar (regex). 5 decisiones presentadas y aprobadas
+    ("si me cierra"): (1) Claude propone una receta de extracción sobre
+    una muestra cruda (25 líneas), aplicada UNA sola vez de forma
+    determinista sobre todo el archivo — nunca parsea fila por fila; (2)
+    flujo de dos pasos, proponer→revisar→confirmar (mismo patrón que
+    modelo y spec), nunca se aplica directo; (3) botón separado y
+    explícito en Fuentes ("Interpretar con Claude"), no un fallback
+    automático si CSV falla — hoy `.txt` ya es sinónimo de CSV delimitado
+    y no hay sniffing de contenido en ningún punto de la ingesta; (4)
+    fila que no calza con la receta (regex que no matchea) = columnas
+    NULL, nunca se descarta la fila, mismo criterio de siempre; (5) un
+    archivo = una tabla por ahora, sin presupuesto de tokens reforzado en
+    código (igual que el resto de la inferencia). **Texto narrativo
+    libre queda explícitamente fuera de alcance** (backlog, ver abajo).
+
+    Arquitectura en dos paquetes, siguiendo la separación ya establecida
+    entre `ingesta/` (determinista) e `inferencia/` (Claude): `app/
+    ingesta/estructura.py` define `RecetaTexto`/`ColumnaReceta` (Pydantic,
+    modo `ancho_fijo` u `regex`), `validar_receta` (reglas que Pydantic no
+    expresa solo: offsets sin solaparse que cubren la línea, o un regex
+    que compila con un grupo de captura por columna y matchea al menos
+    50% de la muestra) y `cargar_texto_estructurado` (el lector: aplica
+    una receta YA CONFIRMADA con Python puro — slicing para ancho fijo,
+    `re.match` para regex — arma una tabla Arrow y la registra en DuckDB,
+    mismo patrón que `lector_excel.py`; devuelve el mismo `TablaCruda` de
+    siempre, así que `procesador._tipar_y_escribir` no sabe ni le importa
+    de dónde salió la tabla). `app/inferencia/texto.py` es el espejo
+    exacto de `semantica.py`/`spec.py`: `SISTEMA`, `armar_pedido` (la
+    muestra cruda tal cual, sin tocar), `consultar_estructura` (loop de 2
+    intentos con el error como feedback, `E-INF-06` si falla dos veces),
+    reusando literalmente `huella_pedido` de `semantica.py` (es genérica).
+    `app/inferencia/tarea.py` suma `tarea_proponer_estructura`
+    (`inferencia.proponer_estructura`), con el mismo mecanismo de caché
+    por huella en la tabla `Inferencia` (`tipo="texto_estructurado"`) que
+    ya usan modelo y spec — a diferencia de esos dos, esta tarea **no
+    tiene un camino "solo heurísticas"**: sin Claude (`E-INF-07`) no hay
+    nada que proponer, es la primera pieza de inferencia sin ese
+    fallback.
+
+    Dos endpoints nuevos en `app/api/fuentes.py`: `POST .../fuentes/
+    estructura/proponer` (multipart, guarda el archivo y encola la
+    propuesta, no ingesta nada todavía) y `POST .../fuentes/estructura/
+    confirmar` (JSON `{tarea_id, receta}`, encola la MISMA tarea
+    `ingesta.procesar_archivo` de siempre con `receta` como parámetro
+    extra). Decisión de seguridad deliberada: `confirmar` NO recibe
+    `ruta_original` del cliente — lo busca del lado del servidor a partir
+    de `tarea_id` (una `Tarea` ya scopeada a `workspace_id`, mismo
+    aislamiento que `fuente_del_workspace`), para no confiar nunca en una
+    ruta de archivo que mande el navegador. Frontend: nueva sección
+    "Texto estructurado" en Fuentes.tsx, separada de la subida normal;
+    `SeccionTextoEstructurado` maneja el paso 1 (elegir archivo, pedir la
+    propuesta), `PropuestaEstructura` pollea la tarea y, al terminar,
+    muestra un formulario con un input editable por columna (nombre; la
+    posición o el patrón quedan de solo lectura) más "Confirmar e
+    ingestar"/"Descartar"; al confirmar, la tarea de ingesta resultante se
+    empuja a la MISMA lista de tareas que ya usa la subida normal
+    (`TareaEnCurso`), sin duplicar la UI de progreso.
+
+    Bug real encontrado en la verificación con Claude real (no en los
+    tests con `ClienteFalso`, que no lo detectan): `MAX_TOKENS_ESTRUCTURA`
+    arrancó en 1500 y la primera prueba en Docker falló con
+    `E-INF-01: sin salida estructurada (stop_reason=max_tokens)` — Claude
+    se quedaba sin presupuesto de tokens antes de terminar la salida
+    estructurada. Subido a 3000 (mismo orden que `MAX_TOKENS_SPEC`), la
+    respuesta real usó 2042 tokens de salida — confirma que 1500 era
+    justo insuficiente. 12 tests puros de `estructura.py`
+    (`test_estructura.py`), 4 de `inferencia/texto.py`
+    (`test_inferencia_texto.py`) y 4 nuevos de API (405 tests backend en
+    total). Verificado en Docker con una organización descartable y
+    Claude real de punta a punta: un reporte de ancho fijo sintético
+    (id/nombre/sucursal/importe, con ids y montos con ceros adelante,
+    típico de sistemas legacy) — Claude propuso exactamente los 4 límites
+    de columna correctos; se probó además editar un nombre de columna
+    antes de confirmar (funcionó, la fuente quedó con el nombre editado,
+    no con el propuesto) y un archivo nuevo de punta a punta en una
+    pestaña recién abierta, sin restos de sesión. Un error de consola
+    (React #310) apareció en la pestaña vieja pero **no se reprodujo** en
+    una pestaña limpia — era ruido acumulado de cambiar de cuenta varias
+    veces en la misma pestaña durante la verificación, no un bug real.
+    Organización de prueba borrada al terminar.
+
+    **Pendiente en el backlog, sin fecha, a pedido explícito de Sd**:
+    texto narrativo libre (actas, emails, mensajes con datos mezclados en
+    prosa, sin un patrón por línea) como su propio ítem más adelante — es
+    extracción de información, un problema distinto de "parsear una
+    tabla con estructura repetida".
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -987,6 +1078,12 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   perdida la usa el modelo semántico actual, se marca aparte en
   `columnas_perdidas_en_uso` — el caso que de verdad importa, porque el
   modelo puede quedar roto en silencio.
+- **Texto sin delimitador estándar** (desde la fase 4, ver § Reglas de
+  texto estructurado): entra por su propio flujo (`/fuentes/estructura/
+  proponer` + `/confirmar`), nunca por `EXTENSIONES_SOPORTADAS` — un
+  `.txt` sin delimitador reconocible seguiría entrando hoy por el camino
+  CSV si se subiera por el botón normal, por eso el botón separado.
+  `formato` queda `"texto"` en la fuente.
 - **Vistas DuckDB por workspace** (`consultas/motor.py`): una base en
   memoria por workspace con `CREATE VIEW nombre_tabla AS read_parquet(uri)`;
   se reconstruye sola si cambia la firma de las fuentes y se invalida al
@@ -1058,6 +1155,29 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   a los ids existentes (`ventas.vendedor` → `ventas.id_vendedor`).
 - La tarea falla con E-INF-02 (sin fuentes), E-INF-03 (fuentes sin perfil:
   resubir) o E-INF-04 (la fusión no valida: bug, nunca debería pasar).
+
+## Reglas de texto estructurado (vigentes desde la fase 4, "Profundidad")
+- Dos paquetes, misma separación que el resto: `app/ingesta/estructura.py`
+  (`RecetaTexto`, `validar_receta`, `cargar_texto_estructurado`) es
+  puramente determinista — aplica una receta YA CONFIRMADA, no sabe nada
+  de Claude; `app/inferencia/texto.py` es quien le pide la receta a
+  Claude, espejo exacto de `semantica.py`/`spec.py` (pedido compacto,
+  reintento con feedback, cache por huella en la tabla `inferencia` con
+  `tipo="texto_estructurado"`).
+- **Sin camino "solo heurísticas"**: a diferencia de modelo y spec, si no
+  hay clave de Claude (`E-INF-07`) no hay nada que proponer — no existe
+  una heurística determinista para texto sin delimitador.
+- Flujo de dos pasos obligatorio: `POST .../fuentes/estructura/proponer`
+  (Claude arma la receta, no ingesta nada) y `POST .../fuentes/estructura/
+  confirmar` (recién ahí corre `ingesta.procesar_archivo`, con `receta`
+  como parámetro extra). `confirmar` nunca recibe una ruta de archivo del
+  cliente: la busca del lado del servidor a partir de `tarea_id` de la
+  propuesta (scopeada a `workspace_id`), para no confiar en una ruta que
+  mande el navegador.
+- La receta se aplica UNA vez de forma determinista sobre todo el
+  archivo, nunca fila por fila. Una fila que no matchea el patrón (regex)
+  queda con sus columnas en NULL, nunca se descarta — mismo criterio que
+  el resto de la ingesta.
 
 ## Reglas de las operaciones granulares (vigentes desde el paso 12)
 - Una operación es un dict `{"operacion": "...", ...parámetros}` validado
@@ -1405,10 +1525,10 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   se descartan todas las consultas cacheadas MENOS `["yo"]`: un `clear()`
   deja al observador de `useQuery` apuntando a una consulta muerta.
 - **Constructor mínimo**: Fuentes (subida múltiple con polling de tareas,
-  esquema por fuente, muestra, calidad, borrar) y Modelo (editor JSON con
-  Validar / Guardar versión / cargar archivo, para el modelo y para el
-  spec, con lista de versiones). Lo reemplazan el wizard (fase 2) y el
-  chat (fase 3).
+  esquema por fuente, muestra, calidad, texto estructurado con receta de
+  Claude revisable, borrar) y Modelo (editor JSON con Validar / Guardar
+  versión / cargar archivo, para el modelo y para el spec, con lista de
+  versiones). Lo reemplazan el wizard (fase 2) y el chat (fase 3).
 - Google Fonts se carga por `<link>` en `index.html` con fallbacks
   (Georgia, Segoe UI). Pendiente vendorear las fuentes antes de producción.
 - **Chat del asistente** (`asistente/Chat.tsx`, pasos 20 y 21): un solo

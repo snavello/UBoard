@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.catalogo.tablas import Workspace
 from app.consultas.motor import obtener_motor
+from app.ingesta.estructura import RecetaTexto
 from app.ingesta.procesador import ingestar_archivo, registrar_fuentes
 from app.nucleo.errores import ErrorApp
 from app.tareas import ContextoTarea, registrar_tarea
@@ -15,18 +16,21 @@ TIPO_TAREA_INGESTA = "ingesta.procesar_archivo"
 @registrar_tarea(TIPO_TAREA_INGESTA)
 def procesar_archivo(contexto: ContextoTarea, parametros: dict) -> dict:
     """parametros: ruta_original (en el almacen), nombre_archivo (como lo subio
-    el usuario). Resultado: las fuentes creadas o reemplazadas."""
+    el usuario), y opcionalmente `receta` (fase 4, "texto estructurado": la
+    persona ya confirmo como partir el texto en columnas, ver
+    app/ingesta/estructura.py). Resultado: las fuentes creadas o reemplazadas."""
     workspace = contexto.sesion.get(Workspace, contexto.workspace_id)
     if workspace is None:
         raise ErrorApp("E-WS-01", f"id: {contexto.workspace_id}")
     nombre_archivo = parametros["nombre_archivo"]
+    receta = RecetaTexto.model_validate(parametros["receta"]) if parametros.get("receta") else None
 
     contexto.informar(5, f"Leyendo {nombre_archivo}")
     datos = contexto.almacen.leer(parametros["ruta_original"])
 
     with tempfile.TemporaryDirectory(prefix="uboard-ingesta-") as temporal:
         contexto.informar(20, "Detectando estructura y tipos")
-        resultados = ingestar_archivo(datos, nombre_archivo, Path(temporal))
+        resultados = ingestar_archivo(datos, nombre_archivo, Path(temporal), receta=receta)
         contexto.informar(70, f"Guardando {len(resultados)} tabla(s)")
         registradas = registrar_fuentes(
             contexto.sesion,

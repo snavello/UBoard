@@ -26,6 +26,9 @@ from app.inferencia.semantica import (
     validar_respuesta,
 )
 import app.inferencia.spec as spec_llm
+import app.inferencia.texto as texto_llm
+from app.ingesta.codificacion import decodificar
+from app.ingesta.estructura import RecetaTexto, validar_receta
 from app.ingesta.tipado import columna_sql
 from app.modelo import operaciones
 from app.modelo.esquema import ModeloSemantico
@@ -41,8 +44,10 @@ TIPO_TAREA_PROPONER_MODELO = "inferencia.proponer_modelo"
 OPERACION_PROPONER = "proponer_modelo"
 TIPO_TAREA_PROPONER_SPEC = "inferencia.proponer_spec"
 OPERACION_PROPONER_SPEC = "proponer_spec"
+TIPO_TAREA_PROPONER_ESTRUCTURA = "inferencia.proponer_estructura"
 TIPO_INFERENCIA_SEMANTICA = "semantica"
 TIPO_INFERENCIA_SPEC = "spec"
+TIPO_INFERENCIA_TEXTO = "texto_estructurado"
 
 
 def _muestras(conexion: duckdb.DuckDBPyConnection, fuentes: list[Fuente], filas: int) -> dict[str, list[dict[str, Any]]]:
@@ -258,3 +263,73 @@ def tarea_proponer_spec(contexto: ContextoTarea, parametros: dict) -> dict:
     )
     contexto.informar(95, "Listo")
     return {"version": version.numero, "resumen": spec_final.resumen(), "titulo": spec_final.titulo, "claude": claude}
+
+
+def proponer_estructura_con_claude(
+    contexto: ContextoTarea, workspace: Workspace, cliente: ClienteLLM, lineas_muestra: list[str]
+) -> tuple[RecetaTexto, dict[str, Any]]:
+    """Mismo mecanismo de cache por huella que `enriquecer_con_claude` y
+    `curar_con_claude`, para la receta de texto estructurado (fase 4)."""
+    modelo_claude = getattr(cliente, "modelo", "?")
+    pedido = texto_llm.armar_pedido(lineas_muestra)
+    huella = huella_pedido(modelo_claude, texto_llm.SISTEMA, pedido)
+    guardada = contexto.sesion.scalar(
+        select(Inferencia).where(Inferencia.workspace_id == workspace.id, Inferencia.huella == huella)
+    )
+    if guardada is not None:
+        receta = RecetaTexto.model_validate(guardada.respuesta)
+        if not validar_receta(lineas_muestra, receta):
+            return receta, {"usado": True, "cache": True, "modelo": guardada.modelo_claude, "tokens_entrada": 0, "tokens_salida": 0}
+
+    receta, cruda = texto_llm.consultar_estructura(cliente, lineas_muestra, pedido)
+    if guardada is None:
+        contexto.sesion.add(
+            Inferencia(
+                workspace_id=workspace.id,
+                tipo=TIPO_INFERENCIA_TEXTO,
+                huella=huella,
+                modelo_claude=cruda.modelo,
+                respuesta=receta.model_dump(mode="json"),
+                tokens_entrada=cruda.tokens_entrada,
+                tokens_salida=cruda.tokens_salida,
+            )
+        )
+        contexto.sesion.commit()
+    return receta, {
+        "usado": True,
+        "cache": False,
+        "modelo": cruda.modelo,
+        "tokens_entrada": cruda.tokens_entrada,
+        "tokens_salida": cruda.tokens_salida,
+    }
+
+
+@registrar_tarea(TIPO_TAREA_PROPONER_ESTRUCTURA)
+def tarea_proponer_estructura(contexto: ContextoTarea, parametros: dict) -> dict:
+    """Primer paso del flujo de texto estructurado (fase 4): le pide a
+    Claude una receta de extraccion sobre una muestra cruda del archivo.
+    No toca `fuente` ni DuckDB -- la ingesta real recien pasa cuando la
+    persona confirma la receta (`POST .../fuentes/estructura/confirmar`,
+    misma tarea `ingesta.procesar_archivo` de siempre, con `receta` como
+    parametro extra). A diferencia del modelo y el spec, ESTA funcion no
+    tiene un camino "solo heuristicas": sin Claude no hay nada que proponer."""
+    workspace = contexto.sesion.get(Workspace, contexto.workspace_id)
+    if workspace is None:
+        raise ErrorApp("E-WS-01", f"id: {contexto.workspace_id}")
+    nombre_archivo = parametros["nombre_archivo"]
+
+    contexto.informar(10, f"Leyendo {nombre_archivo}")
+    datos = contexto.almacen.leer(parametros["ruta_original"])
+    texto, _ = decodificar(datos)
+    lineas_muestra = [linea for linea in texto.splitlines() if linea.strip()][: texto_llm.MAX_LINEAS_MUESTRA]
+    if not lineas_muestra:
+        raise ErrorApp("E-ING-03", f"archivo: {nombre_archivo!r}")
+
+    cliente = obtener_cliente_llm()
+    if cliente is None:
+        raise ErrorApp("E-INF-07")
+
+    contexto.informar(40, "Consultando a Claude")
+    receta, claude = proponer_estructura_con_claude(contexto, workspace, cliente, lineas_muestra)
+    contexto.informar(95, "Listo")
+    return {"receta": receta.model_dump(mode="json"), "muestra": lineas_muestra, "claude": claude}

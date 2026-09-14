@@ -317,6 +317,128 @@ def test_calidad_avisa_huerfanos_con_un_modelo_real_cargado(cliente, datos, cola
     assert problema["detalle"]["huerfanos"] == 1 and problema["detalle"]["hacia"] == "vendedores"
 
 
+RECETA_ANCHO_FIJO = {
+    "modo": "ancho_fijo",
+    "columnas": [{"nombre": "id", "inicio": 0, "fin": 3}, {"nombre": "nombre", "inicio": 3, "fin": 15}],
+}
+LINEA_ANCHO_FIJO = f"{100:03d}{'Ana Martinez':<12}"  # sin 0 adelante: tipa como entero, no como codigo
+
+
+def test_estructura_proponer_y_confirmar_ingesta_con_la_receta(cliente, datos, cola, ingresar, llm_falso):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    llm_falso([RECETA_ANCHO_FIJO])
+
+    propuesta = cliente.post(
+        f"/api/workspaces/{workspace_id}/fuentes/estructura/proponer",
+        files=[("archivo", ("reporte.txt", LINEA_ANCHO_FIJO.encode(), "text/plain"))],
+    )
+    assert propuesta.status_code == 202, propuesta.text
+    tarea_id = propuesta.json()["id"]
+    cola.esperar(tarea_id, timeout=60)
+    tarea_propuesta = cliente.get(f"/api/workspaces/{workspace_id}/tareas/{tarea_id}").json()
+    assert tarea_propuesta["estado"] == "terminada", tarea_propuesta
+    assert tarea_propuesta["resultado"]["receta"]["modo"] == "ancho_fijo"
+    assert tarea_propuesta["resultado"]["muestra"] == [LINEA_ANCHO_FIJO]
+    assert tarea_propuesta["resultado"]["claude"]["usado"] is True
+
+    # Nada se ingesto todavia: sin fuentes hasta confirmar
+    assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json() == []
+
+    confirmacion = cliente.post(
+        f"/api/workspaces/{workspace_id}/fuentes/estructura/confirmar",
+        json={"tarea_id": tarea_id, "receta": RECETA_ANCHO_FIJO},
+    )
+    assert confirmacion.status_code == 202, confirmacion.text
+    tarea_ingesta_id = confirmacion.json()["id"]
+    cola.esperar(tarea_ingesta_id, timeout=60)
+    tarea_ingesta = cliente.get(f"/api/workspaces/{workspace_id}/tareas/{tarea_ingesta_id}").json()
+    assert tarea_ingesta["estado"] == "terminada", tarea_ingesta
+    assert tarea_ingesta["tipo"] == "ingesta.procesar_archivo"
+
+    fuentes = cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()
+    assert len(fuentes) == 1
+    fuente = fuentes[0]
+    assert fuente["formato"] == "texto"
+    assert [(columna["nombre"], columna["tipo"]) for columna in fuente["columnas"]] == [("id", "entero"), ("nombre", "texto")]
+    muestra = cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/muestra").json()
+    assert muestra["filas"] == [[100, "Ana Martinez"]]
+
+
+def test_estructura_confirmar_con_receta_ajustada_por_la_persona(cliente, datos, cola, ingresar, llm_falso):
+    """La persona puede tocar la receta antes de confirmar (ej. renombrar una
+    columna): se ingesta con la receta final, no con la que propuso Claude."""
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    llm_falso([RECETA_ANCHO_FIJO])
+
+    propuesta = cliente.post(
+        f"/api/workspaces/{workspace_id}/fuentes/estructura/proponer",
+        files=[("archivo", ("reporte.txt", LINEA_ANCHO_FIJO.encode(), "text/plain"))],
+    )
+    tarea_id = propuesta.json()["id"]
+    cola.esperar(tarea_id, timeout=60)
+
+    receta_ajustada = {**RECETA_ANCHO_FIJO, "columnas": [{"nombre": "id_empleado", "inicio": 0, "fin": 3}, {"nombre": "nombre", "inicio": 3, "fin": 15}]}
+    confirmacion = cliente.post(
+        f"/api/workspaces/{workspace_id}/fuentes/estructura/confirmar",
+        json={"tarea_id": tarea_id, "receta": receta_ajustada},
+    )
+    cola.esperar(confirmacion.json()["id"], timeout=60)
+    fuente = cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()[0]
+    assert [columna["nombre"] for columna in fuente["columnas"]] == ["id_empleado", "nombre"]
+
+
+def test_estructura_confirmar_con_tarea_ajena_o_inexistente_no_pasa(cliente, datos, cola, ingresar, llm_falso):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+
+    # Tarea que no existe
+    respuesta = cliente.post(
+        f"/api/workspaces/{workspace_id}/fuentes/estructura/confirmar",
+        json={"tarea_id": "no-existe", "receta": RECETA_ANCHO_FIJO},
+    )
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "E-TAREA-01"
+
+    # Tarea de OTRO workspace: tampoco (no se puede reusar su ruta_original)
+    llm_falso([RECETA_ANCHO_FIJO])
+    propuesta = cliente.post(
+        f"/api/workspaces/{workspace_id}/fuentes/estructura/proponer",
+        files=[("archivo", ("reporte.txt", LINEA_ANCHO_FIJO.encode(), "text/plain"))],
+    )
+    tarea_id = propuesta.json()["id"]
+    cola.esperar(tarea_id, timeout=60)
+    cliente.post("/api/auth/logout")
+    ingresar("constructor@beta.test")
+    ajeno = cliente.post(
+        f"/api/workspaces/{datos.beta_workspace_id}/fuentes/estructura/confirmar",
+        json={"tarea_id": tarea_id, "receta": RECETA_ANCHO_FIJO},
+    )
+    assert ajeno.status_code == 404
+    assert ajeno.json()["codigo"] == "E-TAREA-01"
+
+
+def test_estructura_proponer_sin_clave_de_claude_e_inf_07(cliente, datos, cola, ingresar, monkeypatch):
+    import app.inferencia.tarea as inferencia_tarea
+
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    # A diferencia de llm_falso (respuestas grabadas), acá se simula que no
+    # hay clave configurada en absoluto: obtener_cliente_llm() -> None.
+    monkeypatch.setattr(inferencia_tarea, "obtener_cliente_llm", lambda: None)
+
+    propuesta = cliente.post(
+        f"/api/workspaces/{workspace_id}/fuentes/estructura/proponer",
+        files=[("archivo", ("reporte.txt", LINEA_ANCHO_FIJO.encode(), "text/plain"))],
+    )
+    tarea_id = propuesta.json()["id"]
+    cola.esperar(tarea_id, timeout=60)
+    tarea = cliente.get(f"/api/workspaces/{workspace_id}/tareas/{tarea_id}").json()
+    assert tarea["estado"] == "error"
+    assert tarea["error"].startswith("E-INF-07: ")
+
+
 def test_fuente_sin_perfil_responde_e_ing_06(cliente, datos, cola, ingresar, sesion_db):
     from app.catalogo.tablas import Fuente
 

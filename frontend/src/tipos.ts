@@ -52,6 +52,22 @@ export interface DiffEsquema {
   filas_despues: number;
 }
 
+// Texto estructurado (fase 4): como partir cada linea en columnas, propuesto
+// por Claude sobre una muestra y aplicado de forma deterministica al
+// confirmar. En modo "regex", inicio/fin quedan sin usar (el orden de la
+// lista es el orden de los grupos de captura del patron).
+export interface ColumnaReceta {
+  nombre: string;
+  inicio?: number | null;
+  fin?: number | null;
+}
+
+export interface RecetaTexto {
+  modo: "ancho_fijo" | "regex";
+  columnas: ColumnaReceta[];
+  patron?: string | null;
+}
+
 export interface ResultadoTarea {
   // ingesta.procesar_archivo
   fuentes?: { id: number; nombre_tabla: string; filas: number; reemplazada: boolean; diff_esquema?: DiffEsquema }[];
@@ -62,6 +78,10 @@ export interface ResultadoTarea {
   claude?: { usado: boolean; cache: boolean; modelo?: string; tokens_entrada?: number; tokens_salida?: number; advertencia?: string };
   // inferencia.proponer_spec, ademas de version, resumen y claude
   titulo?: string | null;
+  // inferencia.proponer_estructura (texto estructurado, fase 4): la receta
+  // propuesta y la muestra cruda que Claude vio, para mostrar antes de confirmar.
+  receta?: RecetaTexto;
+  muestra?: string[];
 }
 
 export interface Tarea {

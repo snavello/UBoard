@@ -2154,3 +2154,123 @@ devolvió los cinco problemas esperados con las severidades correctas
 duplicados) y la pantalla de Fuentes los mostró igual, con las pastillas
 correctas; la fuente `vendedores`, sin problemas, mostró el estado
 vacío. Organización de prueba borrada al terminar.
+
+## 2026-09-14 — Texto estructurado con parser propuesto por Claude (v0.32.01)
+
+Cuarto pendiente de "Fase 4 — Profundidad". La especificación decía
+apenas una línea sobre esto ("texto estructurado con parser propuesto
+por Claude"), sin definir el caso. Antes de armar cualquier decisión se
+le preguntó a Sd directamente qué archivo real tenía en mente (evitar
+diseñar algo genérico que no sirviera): eligió **reportes de ancho
+fijo** (columnas alineadas por posición, típico de sistemas legacy tipo
+COBOL/AS400) como ejemplo concreto, con datos de prueba sintéticos
+(todavía no tenía un archivo real). A mitad de la lectura, mientras se
+investigaba la arquitectura en paralelo, Sd amplió el pedido: "en
+realidad quiero que además pueda tomar también datos que no tengan
+ancho fijo" — no era un parser específico de ancho fijo lo que hacía
+falta, sino uno GENERAL: Claude mira una muestra y decide él mismo si
+el texto tiene columnas por posición o un patrón repetido sin
+delimitador estándar, y propone la receta que corresponda.
+
+Antes de tocar código se investigó la arquitectura actual con tres
+lecturas en paralelo (vía Workflow, la única vez que se usó orquestación
+multi-agente en toda la sesión, y solo para lectura — nunca para
+escribir código, por la disciplina secuencial que exige el Postgres/
+Docker/git compartidos de este proyecto): el pipeline de `app/ingesta/`
+(confirmó que todo lector converge en el contrato `TablaCruda`, listo
+para que un lector nuevo encaje sin tocar tipado ni perfilado), el
+patrón de `ClienteLLM` (confirmó que "pedido compacto + salida Pydantic
++ validación propia + reintento + caché por huella" ya existe dos veces,
+en `semantica.py` y `spec.py`, y es directamente reusable) y el flujo de
+subida completo (confirmó que el formato de archivo hoy se decide SOLO
+por extensión, sin mirar el contenido, y que `.txt` ya es sinónimo de
+CSV delimitado — un dato clave para decidir cómo tenía que entrar este
+caso nuevo).
+
+Con esa lectura se presentaron 5 decisiones y Sd las aprobó todas ("si
+me cierra"): (1) Claude propone una **receta** de extracción sobre una
+muestra (offsets de ancho fijo, o un patrón regex con un grupo de
+captura por columna), aplicada una sola vez de forma determinista sobre
+todo el archivo — nunca parsea fila por fila, ni por costo ni por
+consistencia, mismo principio de "heurística barata, Claude solo para
+lo ambiguo" que rige el resto del proyecto; (2) flujo de dos pasos,
+proponer→revisar→confirmar, igual que el modelo y el spec — la persona
+ve la receta antes de que se ingeste el archivo entero; (3) entra por
+un botón separado y explícito en Fuentes, no como fallback automático
+si CSV falla (dado que no hay forma de distinguir "texto raro" de
+"CSV mal armado" sin mirar el contenido, y `.txt` ya está tomado); (4)
+una fila que no matchea la receta queda con columnas NULL, nunca se
+descarta (mismo criterio de siempre); (5) alcance chico — un archivo,
+una tabla, sin presupuesto de tokens reforzado en código, y **texto
+narrativo libre (actas, emails, mensajes) explícitamente fuera de
+alcance**, a pedido de Sd para tratarlo como su propio ítem más
+adelante (anotado en el backlog del CLAUDE.md).
+
+La arquitectura quedó en dos paquetes, respetando la separación que ya
+existía entre "determinista" y "asistido por Claude": `app/ingesta/
+estructura.py` (`RecetaTexto`, `validar_receta`, `cargar_texto_
+estructurado`) no sabe nada de Claude — aplica una receta YA CONFIRMADA
+con Python puro (slicing para ancho fijo, `re.match` para regex) y
+arma una tabla Arrow que se registra en DuckDB, exactamente el mismo
+patrón que ya usaba `lector_excel.py`. `app/inferencia/texto.py` es el
+espejo exacto de `semantica.py`/`spec.py`: pedido compacto con la
+muestra cruda, reintento con el error como feedback, y reusa
+literalmente la función `huella_pedido` de `semantica.py` en vez de
+duplicarla (es completamente genérica: `modelo|sistema|pedido`). La
+tarea que orquesta la propuesta (`app/inferencia/tarea.py`) reusa el
+mismo mecanismo de caché por huella en la tabla `inferencia` que ya
+tenían modelo y spec, con un `tipo` nuevo — pero a diferencia de esos
+dos, esta pieza **no tiene un camino "solo heurísticas"**: sin clave de
+Claude no hay nada que proponer, es la primera pieza de inferencia sin
+ese fallback (error nuevo `E-INF-07`).
+
+Dos endpoints nuevos: `POST .../fuentes/estructura/proponer` (guarda el
+archivo, encola la propuesta, no ingesta nada) y `POST .../fuentes/
+estructura/confirmar` (encola la MISMA tarea de ingesta de siempre, con
+la receta como parámetro extra). Una decisión de seguridad que valía la
+pena pensar dos veces: el endpoint de confirmar NO acepta la ruta del
+archivo desde el cliente — la busca del lado del servidor a partir del
+id de la tarea de propuesta (que ya está scopeada al workspace, mismo
+aislamiento que el resto de la API). La primera versión del diseño sí
+la hacía viajar desde el frontend, y quedó descartada antes de escribir
+el endpoint: nada impedía que alguien mandara una ruta de otro
+workspace y la "confirmara" como propia.
+
+Un bug real apareció recién en la verificación con Claude de verdad (los
+tests con `ClienteFalso` no lo iban a encontrar nunca, porque no miden
+tokens reales): `MAX_TOKENS_ESTRUCTURA` arrancó en 1500 y la primera
+prueba en Docker terminó en `E-INF-01: sin salida estructurada
+(stop_reason=max_tokens)` — Claude se quedaba sin presupuesto antes de
+terminar de construir la respuesta estructurada. Se subió a 3000 (mismo
+orden que `MAX_TOKENS_SPEC`) y la respuesta real usó 2042 tokens de
+salida, confirmando que 1500 efectivamente no alcanzaba.
+
+Verificado en Docker con una organización descartable, con Claude real
+de punta a punta (no `ClienteFalso`): un reporte de ancho fijo
+sintético (id, nombre, sucursal, importe — con ids y montos con ceros
+adelante, típico de un sistema legacy) subido por curl primero, para
+confirmar el backend antes de tocar la UI: Claude propuso exactamente
+los 4 límites de columna correctos (`id[0:5]`, `nombre[5:25]`,
+`zona[25:35]`, `monto[35:43]`), y la confirmación con dos nombres
+ajustados a mano (`zona`→`sucursal`, `monto`→`importe`) ingestó
+correctamente las 6 filas. Después, la misma prueba completa desde el
+navegador: el botón "Interpretar con Claude" arma la propuesta, el
+formulario muestra un input editable por columna con la posición al
+lado, cambiar un nombre ("zona" a "sucursal") funcionó, y "Confirmar e
+ingestar" disparó la ingesta real, que apareció en la MISMA lista de
+tareas que ya usa la subida normal (se reusó `TareaEnCurso` en vez de
+duplicar la UI de progreso). Repetido en una pestaña completamente
+nueva (sesión limpia, sin queries cacheadas de antes) para descartar un
+error de consola (React #310) que había aparecido en la pestaña vieja
+— no se reprodujo: era ruido acumulado de cambiar de cuenta varias
+veces en la misma pestaña durante la verificación, no un bug real del
+código nuevo. Organización de prueba borrada al terminar.
+
+20 tests nuevos (405 en total): 12 puros de `app/ingesta/estructura.py`
+(`test_estructura.py`: validación de ancho fijo y regex, casos de error,
+aplicación determinista de la receta, fila que no matchea queda nula) +
+4 de `app/inferencia/texto.py` (`test_inferencia_texto.py`: pedido
+compacto, reintento con feedback, dos fallos da `E-INF-06`) + 4 de API
+en `test_fuentes_api.py` (proponer y confirmar de punta a punta, receta
+ajustada por la persona antes de confirmar, tarea ajena o inexistente
+no pasa, sin clave de Claude da `E-INF-07`).

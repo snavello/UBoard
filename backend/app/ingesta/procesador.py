@@ -16,6 +16,7 @@ from app.almacen.base import AlmacenArchivos
 from app.almacen.rutas import ruta_parquet_fuente
 from app.catalogo.tablas import EstadoFuente, Fuente, Workspace
 from app.ingesta.encabezado import normalizar_nombre_columna
+from app.ingesta.estructura import RecetaTexto, cargar_texto_estructurado
 from app.ingesta.lector_csv import TablaCruda, cargar_csv
 from app.ingesta.lector_excel import cargar_excel
 from app.ingesta.tipado import TAMANIO_MUESTRA, columna_sql, decidir_tipo, expresion_limpia, expresion_sql
@@ -61,13 +62,21 @@ def validar_extension(nombre_archivo: str) -> str:
     return extension
 
 
-def ingestar_archivo(datos: bytes, nombre_archivo: str, directorio_temporal: Path) -> list[ResultadoTabla]:
-    """Bytes de un CSV o Excel -> una o mas tablas tipadas como Parquet en el
-    directorio temporal. Excel: una por hoja con datos."""
-    extension = validar_extension(nombre_archivo)
+def ingestar_archivo(
+    datos: bytes, nombre_archivo: str, directorio_temporal: Path, receta: RecetaTexto | None = None
+) -> list[ResultadoTabla]:
+    """Bytes de un CSV, Excel o texto estructurado -> una o mas tablas
+    tipadas como Parquet en el directorio temporal. Excel: una por hoja con
+    datos. Con `receta` (fase 4, "texto estructurado"): se ignora la
+    extension del archivo, la receta ya confirmada por la persona decide
+    como partir cada linea (ver app/ingesta/estructura.py)."""
     base = normalizar_nombre_columna(Path(nombre_archivo).stem, 0)
     conexion = duckdb.connect()
     try:
+        if receta is not None:
+            tabla = cargar_texto_estructurado(conexion, datos, "cruda", receta, directorio_temporal)
+            return [_tipar_y_escribir(conexion, tabla, base, None, "texto", directorio_temporal)]
+        extension = validar_extension(nombre_archivo)
         if extension in EXTENSIONES_CSV:
             tabla = cargar_csv(conexion, datos, "cruda", directorio_temporal)
             return [_tipar_y_escribir(conexion, tabla, base, None, "csv", directorio_temporal)]

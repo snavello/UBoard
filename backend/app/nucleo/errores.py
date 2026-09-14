@@ -51,6 +51,8 @@ MENSAJES: dict[str, tuple[int, str]] = {
     "E-INF-03": (400, "Hay fuentes sin perfil (se ingestaron con una versión anterior). Volvé a subirlas."),
     "E-INF-04": (500, "El modelo propuesto no pasó la validación. Revisá el detalle."),
     "E-INF-05": (502, "Claude devolvió una propuesta inválida dos veces. La propuesta sigue con las heurísticas."),
+    "E-INF-06": (502, "Claude no pudo proponer una estructura utilizable para este texto. Probá con otro archivo."),
+    "E-INF-07": (400, "Esta función necesita que Claude esté configurado: falta la clave de Anthropic."),
     "E-CONS-01": (400, "La consulta usa una métrica, entidad o campo que no está en el modelo."),
     "E-CONS-02": (400, "No hay relación en el modelo entre las entidades que pide la consulta."),
     "E-CONS-04": (400, "Esa combinación multiplicaría filas: la métrica no se puede desglosar por esa dimensión."),

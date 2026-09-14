@@ -11,7 +11,7 @@ import { Marco } from "../compartido/componentes/Marco";
 import { resumirDiffEsquema } from "../compartido/diff";
 import { formatearCelda, formatearFecha, formatearNumero } from "../compartido/formato";
 import { useSesion } from "../compartido/sesion";
-import type { Fuente, Muestra, PerfilFuente, ProblemaCalidad, ReporteCalidad, Tarea } from "../tipos";
+import type { Fuente, Muestra, PerfilFuente, ProblemaCalidad, RecetaTexto, ReporteCalidad, Tarea } from "../tipos";
 import estilos from "./Fuentes.module.css";
 
 const EXTENSIONES = ".csv,.txt,.tsv,.xlsx,.xlsm";
@@ -97,6 +97,11 @@ export function Fuentes() {
           )}
         </section>
 
+        <SeccionTextoEstructurado
+          workspaceId={workspaceId}
+          onIngestaEncolada={(tareaId) => setTareas((actuales) => [tareaId, ...actuales])}
+        />
+
         <section>
           <h2 className={estilos.subtitulo}>Fuentes cargadas</h2>
           {fuentes.isPending && <Cargando />}
@@ -137,6 +142,167 @@ export function Fuentes() {
         )}
       </div>
     </Marco>
+  );
+}
+
+/* Texto estructurado (fase 4): un boton separado y explicito (nunca un
+   fallback automatico si el CSV falla, ".txt" ya es sinonimo de CSV
+   delimitado hoy). Flujo de dos pasos: proponer (Claude arma una receta
+   sobre una muestra) -> revisar/ajustar -> confirmar (recien ahi se
+   ingesta el archivo entero, con la misma tarea ingesta.procesar_archivo
+   de siempre). */
+function SeccionTextoEstructurado({ workspaceId, onIngestaEncolada }: { workspaceId: number; onIngestaEncolada: (tareaId: string) => void }) {
+  const entrada = useRef<HTMLInputElement>(null);
+  const [tareaPropuesta, setTareaPropuesta] = useState<string | null>(null);
+
+  const proponer = useMutation({
+    mutationFn: async (archivo: File) => {
+      const datos = new FormData();
+      datos.append("archivo", archivo);
+      return pedir<Tarea>(rutaWorkspace(workspaceId, "/fuentes/estructura/proponer"), { method: "POST", body: datos });
+    },
+    onSuccess: (tarea) => {
+      setTareaPropuesta(tarea.id);
+      if (entrada.current) entrada.current.value = "";
+    },
+  });
+
+  return (
+    <section className={estilos.estructura}>
+      <div>
+        <h2>Texto estructurado</h2>
+        <p className="secundario">
+          Para archivos de texto sin un separador estándar (por ejemplo, reportes de ancho fijo de sistemas viejos): Claude mira una muestra y
+          propone cómo partirlo en columnas. Vas a poder revisar la propuesta antes de ingestar el archivo entero.
+        </p>
+      </div>
+      <div className={estilos.controlesSubida}>
+        <input ref={entrada} className={estilos.archivo} type="file" aria-label="Elegir archivo de texto" />
+        <button
+          type="button"
+          className="boton boton--primario"
+          disabled={proponer.isPending}
+          onClick={() => {
+            const archivo = entrada.current?.files?.[0];
+            if (archivo) proponer.mutate(archivo);
+          }}
+        >
+          {proponer.isPending ? "Analizando…" : "Interpretar con Claude"}
+        </button>
+      </div>
+      {proponer.isError && <AvisoError error={proponer.error} titulo="No se pudo interpretar el archivo" />}
+      {tareaPropuesta && (
+        <PropuestaEstructura
+          key={tareaPropuesta}
+          workspaceId={workspaceId}
+          tareaId={tareaPropuesta}
+          onDescartar={() => setTareaPropuesta(null)}
+          onConfirmada={(tareaIngestaId) => {
+            setTareaPropuesta(null);
+            onIngestaEncolada(tareaIngestaId);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function PropuestaEstructura({
+  workspaceId,
+  tareaId,
+  onDescartar,
+  onConfirmada,
+}: {
+  workspaceId: number;
+  tareaId: string;
+  onDescartar: () => void;
+  onConfirmada: (tareaIngestaId: string) => void;
+}) {
+  const tarea = useQuery({
+    queryKey: ["tarea", workspaceId, tareaId],
+    queryFn: () => pedir<Tarea>(rutaWorkspace(workspaceId, `/tareas/${tareaId}`)),
+    refetchIntervalInBackground: true,
+    refetchInterval: (consulta) => {
+      const estado = consulta.state.data?.estado;
+      return estado === "pendiente" || estado === "corriendo" ? 800 : false;
+    },
+  });
+  const [receta, setReceta] = useState<RecetaTexto | null>(null);
+  useEffect(() => {
+    if (tarea.data?.estado === "terminada" && tarea.data.resultado?.receta && !receta) {
+      setReceta(tarea.data.resultado.receta);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tarea.data?.estado]);
+
+  const confirmar = useMutation({
+    mutationFn: (recetaFinal: RecetaTexto) =>
+      pedir<Tarea>(rutaWorkspace(workspaceId, "/fuentes/estructura/confirmar"), {
+        method: "POST",
+        json: { tarea_id: tareaId, receta: recetaFinal },
+      }),
+    onSuccess: (tareaIngesta) => onConfirmada(tareaIngesta.id),
+  });
+
+  if (!tarea.data || tarea.data.estado === "pendiente" || tarea.data.estado === "corriendo") {
+    return (
+      <div className={estilos.tarea}>
+        <div className={estilos.barraProgreso} aria-hidden="true">
+          <span style={{ width: `${tarea.data?.progreso ?? 0}%` }} />
+        </div>
+        <span>{tarea.data?.mensaje ?? "Encolando…"}</span>
+      </div>
+    );
+  }
+
+  if (tarea.data.estado === "error") {
+    return <AvisoError error={new Error(tarea.data.error ?? "Error desconocido")} titulo="No se pudo interpretar el archivo" />;
+  }
+
+  if (!receta) return null;
+  const muestra = tarea.data.resultado?.muestra ?? [];
+
+  return (
+    <div className={estilos.recetaPreview}>
+      <p className="secundario">
+        {receta.modo === "ancho_fijo" ? "Detectamos columnas por posición (ancho fijo). " : `Detectamos un patrón repetido por línea. `}
+        Revisá los nombres antes de confirmar (podés cambiarlos).
+      </p>
+      <ul className={estilos.columnasReceta}>
+        {receta.columnas.map((columna, indice) => (
+          <li key={indice} className={estilos.campoReceta}>
+            <label className="etiqueta">
+              {receta.modo === "ancho_fijo" ? `Posición ${columna.inicio}–${columna.fin}` : `Columna ${indice + 1} del patrón`}
+              <input
+                className="campo"
+                value={columna.nombre}
+                onChange={(evento) => {
+                  const nombre = evento.target.value;
+                  setReceta((actual) =>
+                    actual ? { ...actual, columnas: actual.columnas.map((c, i) => (i === indice ? { ...c, nombre } : c)) } : actual,
+                  );
+                }}
+              />
+            </label>
+          </li>
+        ))}
+      </ul>
+      {muestra.length > 0 && (
+        <details className={estilos.muestraTexto}>
+          <summary>Ver la muestra que analizó Claude</summary>
+          <pre>{muestra.join("\n")}</pre>
+        </details>
+      )}
+      <div className={estilos.controlesSubida}>
+        <button type="button" className="boton boton--primario" disabled={confirmar.isPending} onClick={() => confirmar.mutate(receta)}>
+          {confirmar.isPending ? "Confirmando…" : "Confirmar e ingestar"}
+        </button>
+        <button type="button" className="boton boton--chico" onClick={onDescartar} disabled={confirmar.isPending}>
+          Descartar
+        </button>
+      </div>
+      {confirmar.isError && <AvisoError error={confirmar.error} titulo="No se pudo confirmar" />}
+    </div>
   );
 }
 
