@@ -72,6 +72,14 @@ def test_resubir_reemplaza_la_misma_fuente(cliente, datos, cola, ingresar):
     tarea = _procesar(cliente, cola, workspace_id, "ventas.csv", b"IdVenta,Fecha,Importe,Sucursal\n1,2026-01-05,10.5,Centro\n2,2026-01-06,20,Norte\n3,2026-01-07,30,Oeste\n")
     assert tarea["resultado"]["fuentes"][0]["reemplazada"] is True
 
+    # Resubida con deteccion de cambios (fase 4): el diff de esquema viaja en
+    # el resultado de la tarea, con lo que cambio respecto de la version anterior.
+    diff = tarea["resultado"]["fuentes"][0]["diff_esquema"]
+    assert diff["columnas_nuevas"] == ["sucursal"]
+    assert diff["columnas_perdidas"] == []
+    assert diff["columnas_perdidas_en_uso"] == []
+    assert diff["filas_antes"] == 2 and diff["filas_despues"] == 3
+
     fuentes = cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()
     assert len(fuentes) == 1
     segunda = fuentes[0]
@@ -81,6 +89,43 @@ def test_resubir_reemplaza_la_misma_fuente(cliente, datos, cola, ingresar):
     assert [columna["nombre"] for columna in segunda["columnas"]][-1] == "sucursal"
     muestra = cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{segunda['id']}/muestra").json()
     assert len(muestra["filas"]) == 3  # la vista DuckDB se reconstruyo
+
+
+def test_subir_por_primera_vez_no_trae_diff(cliente, datos, cola, ingresar):
+    ingresar("constructor@acme.test")
+    tarea = _procesar(cliente, cola, datos.acme_workspace_id, "ventas.csv", CSV_VENTAS)
+    assert "diff_esquema" not in tarea["resultado"]["fuentes"][0]  # nada contra que comparar
+
+
+def test_resubida_avisa_si_se_pierde_una_columna_que_el_modelo_usa(cliente, datos, cola, ingresar):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    _procesar(cliente, cola, workspace_id, "ventas.csv", CSV_VENTAS)
+
+    modelo = {
+        "entidades": [
+            {
+                "id": "ventas",
+                "nombre": "Ventas",
+                "fuente": "ventas",
+                "tipo": "hechos",
+                "clave_primaria": ["id_venta"],
+                "campos": [
+                    {"id": "id_venta", "columna_origen": "id_venta", "nombre": "Id venta", "tipo_dato": "entero", "tipo_semantico": "identificador"},
+                    {"id": "importe", "columna_origen": "importe", "nombre": "Importe", "tipo_dato": "decimal", "tipo_semantico": "monto"},
+                ],
+            }
+        ]
+    }
+    respuesta_modelo = cliente.put(f"/api/workspaces/{workspace_id}/modelo", json=modelo)
+    assert respuesta_modelo.status_code == 201, respuesta_modelo.text
+
+    # La resubida se lleva "Importe" (que el modelo usa) y trae "Sucursal" nueva
+    tarea = _procesar(cliente, cola, workspace_id, "ventas.csv", b"IdVenta,Fecha,Sucursal\n1,2026-01-05,Centro\n2,2026-01-06,Norte\n")
+    diff = tarea["resultado"]["fuentes"][0]["diff_esquema"]
+    assert diff["columnas_nuevas"] == ["sucursal"]
+    assert "importe" in diff["columnas_perdidas"]
+    assert diff["columnas_perdidas_en_uso"] == ["importe"]
 
 
 def test_excel_con_dos_hojas_crea_dos_fuentes(cliente, datos, cola, ingresar):

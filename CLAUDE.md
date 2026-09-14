@@ -814,6 +814,42 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     `top`) nunca agrega grises aunque el resto esté en cero. 4 tests
     nuevos de API (365 en total); sin tests nuevos de frontend (se
     verifica en el navegador, mismo criterio de siempre).
+  - Resubida con detección de cambios: HECHO 2026-09-13 (v0.30.01).
+    Segundo pendiente de "Fase 4 — Profundidad". Sd pidió "total más diff"
+    por ahora, aclarando que a futuro quiere las DOS alternativas
+    disponibles (reemplazo total y un esquema incremental/de novedades)
+    porque UBoard "pretende ser una herramienta versátil de propósito
+    general, lo más amplia y adaptable posible" — anotado para revisar
+    cuando haga falta, no se construyó todavía (es un cambio de
+    arquitectura mucho más grande: clave declarada por fuente, decidir
+    qué significa que una fila "no venga" en una subida, el almacén deja
+    de ser "un Parquet por fuente"). Lo que se construyó ahora: el
+    reemplazo total de siempre (sin cambios ahí) más un reporte
+    informativo de qué cambió, ya anotado como pendiente desde el paso 3
+    ("el diff de esquema es de la fase 4"). `app/ingesta/procesador.py`
+    gana `calcular_diff_esquema` (pura: columnas nuevas, perdidas, con
+    tipo cambiado, delta de filas) y `DiffEsquema.columnas_perdidas_en_uso`
+    — el caso que de verdad importa avisar: una columna que desapareció Y
+    que el modelo semántico actual usa (`Campo.columna_origen` de la
+    entidad de esa fuente), porque ese modelo puede quedar roto en
+    silencio hasta que alguien lo use. `registrar_fuentes` captura el
+    esquema/filas VIEJOS antes de sobreescribirlos y calcula el diff
+    comparando contra el modelo actual (si hay uno cargado); el resultado
+    de la tarea `ingesta.procesar_archivo` lleva `diff_esquema` por fuente
+    (solo cuando `reemplazada=true`, nada contra que comparar en un alta).
+    Frontend (`Fuentes.tsx`): debajo del resumen de siempre
+    ("nombre: N filas (reemplazada)"), una línea en gris con el mismo
+    signo +/−/~ que ya usa el historial de versiones
+    (`compartido/diff.ts`, nueva función `resumirDiffEsquema`), y si hay
+    columnas perdidas en uso, una segunda línea en rojo y negrita aparte
+    ("Tu modelo usa X, que ya no está en el archivo nuevo."). Probado en
+    Docker con una organización descartable, subiendo archivos de verdad
+    a través del formulario del navegador (no solo por API): una
+    resubida que agrega y saca columnas mostró el resumen correcto; una
+    que se llevó puesta una columna que el modelo usaba mostró la
+    advertencia en rojo tal cual se diseñó. 7 tests nuevos de backend
+    (372 en total: 5 puros de `calcular_diff_esquema` + 2 de API) y 5 de
+    vitest para `resumirDiffEsquema` (40 en total).
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -884,8 +920,16 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - **Identidad de una fuente = `nombre_tabla`** dentro del workspace (stem del
   archivo normalizado; en Excel con varias hojas, `archivo_hoja`). Resubir
   con el mismo nombre_tabla REEMPLAZA Parquet y esquema en la misma fila
-  (`reemplazada: true` en el resultado de la tarea); el diff de esquema es
-  de la fase 4. `huella` = sha256(nombre_tabla + columnas:tipos)[:16].
+  (`reemplazada: true` en el resultado de la tarea). `huella` =
+  sha256(nombre_tabla + columnas:tipos)[:16]. **Resubida con detección de
+  cambios** (desde la fase 4; decisión de Sd: reemplazo total siempre,
+  no un esquema incremental — eso queda para más adelante si hace falta):
+  el resultado de la tarea también trae `diff_esquema` por fuente
+  reemplazada (`calcular_diff_esquema`, pura) con columnas nuevas,
+  perdidas, con tipo cambiado y el delta de filas; si alguna columna
+  perdida la usa el modelo semántico actual, se marca aparte en
+  `columnas_perdidas_en_uso` — el caso que de verdad importa, porque el
+  modelo puede quedar roto en silencio.
 - **Vistas DuckDB por workspace** (`consultas/motor.py`): una base en
   memoria por workspace con `CREATE VIEW nombre_tabla AS read_parquet(uri)`;
   se reconstruye sola si cambia la firma de las fuentes y se invalida al

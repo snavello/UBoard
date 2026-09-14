@@ -8,6 +8,7 @@ import { pedir, rutaWorkspace } from "../compartido/api";
 import { AvisoError } from "../compartido/componentes/Aviso";
 import { Cargando } from "../compartido/componentes/Cargando";
 import { Marco } from "../compartido/componentes/Marco";
+import { resumirDiffEsquema } from "../compartido/diff";
 import { formatearCelda, formatearFecha, formatearNumero } from "../compartido/formato";
 import { useSesion } from "../compartido/sesion";
 import type { Fuente, Muestra, PerfilFuente, Tarea } from "../tipos";
@@ -162,13 +163,27 @@ function TareaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: numbe
       <div className={estilos.barraProgreso} aria-hidden="true">
         <span style={{ width: `${estado === "error" ? 100 : progreso}%` }} className={estado === "error" ? estilos.progresoError : undefined} />
       </div>
-      <span>
-        {estado === "terminada" && resultado?.fuentes
-          ? resultado.fuentes.map((fuente) => `${fuente.nombre_tabla}: ${formatearNumero(fuente.filas, 0)} filas${fuente.reemplazada ? " (reemplazada)" : ""}`).join(" · ")
-          : estado === "error"
-            ? error
-            : mensaje ?? "Procesando…"}
-      </span>
+      {estado === "terminada" && resultado?.fuentes ? (
+        resultado.fuentes.map((fuente) => {
+          const diff = fuente.diff_esquema ? resumirDiffEsquema(fuente.diff_esquema) : null;
+          return (
+            <div key={fuente.id} className={estilos.resultadoFuente}>
+              <span>
+                {fuente.nombre_tabla}: {formatearNumero(fuente.filas, 0)} filas{fuente.reemplazada ? " (reemplazada)" : ""}
+              </span>
+              {/* Resubida con deteccion de cambios (fase 4): solo hay diff cuando se pisa una fuente que ya existia. */}
+              {diff && (
+                <span className={`mudo ${estilos.diffEsquema}`}>
+                  {diff.resumen}
+                  {diff.advertencia && <strong className={estilos.advertenciaDiff}> {diff.advertencia}</strong>}
+                </span>
+              )}
+            </div>
+          );
+        })
+      ) : (
+        <span>{estado === "error" ? error : (mensaje ?? "Procesando…")}</span>
+      )}
     </li>
   );
 }

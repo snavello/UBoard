@@ -1,5 +1,6 @@
 """La ingesta como tarea en segundo plano."""
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
 from app.catalogo.tablas import Workspace
@@ -41,7 +42,15 @@ def procesar_archivo(contexto: ContextoTarea, parametros: dict) -> dict:
     contexto.informar(95, "Listo")
     return {
         "fuentes": [
-            {"id": fuente.id, "nombre_tabla": fuente.nombre_tabla, "filas": fuente.filas, "reemplazada": reemplazada}
-            for fuente, reemplazada in registradas
+            {
+                "id": fuente.id,
+                "nombre_tabla": fuente.nombre_tabla,
+                "filas": fuente.filas,
+                "reemplazada": reemplazada,
+                # Resubida con deteccion de cambios (fase 4): solo hay diff
+                # cuando se reemplazo una fuente existente, no en un alta.
+                **({"diff_esquema": asdict(diff)} if diff is not None else {}),
+            }
+            for fuente, reemplazada, diff in registradas
         ]
     }

@@ -7,6 +7,9 @@
 .barraProgreso { height: 4px; background: var(--superficie-2); border-radius: 2px; overflow: hidden; }
 .barraProgreso span { display: block; height: 100%; background: var(--acento); transition: width 300ms; }
 .progresoError { background: var(--peligro) !important; }
+.resultadoFuente { display: flex; flex-direction: column; gap: 2px; }
+.diffEsquema { font-size: 13px; }
+.advertenciaDiff { color: var(--peligro); font-weight: 600; }
 .subtitulo { margin-bottom: 14px; }
 .lista { display: flex; flex-direction: column; gap: 14px; }
 .tarjeta { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--superficie); }

@@ -7,7 +7,7 @@ import duckdb
 import pytest
 from openpyxl import Workbook
 
-from app.ingesta.procesador import ResultadoTabla, ingestar_archivo, validar_extension
+from app.ingesta.procesador import ResultadoTabla, calcular_diff_esquema, ingestar_archivo, validar_extension
 from app.nucleo.errores import ErrorApp
 
 
@@ -149,3 +149,48 @@ def test_excel_roto(tmp_path):
     with pytest.raises(ErrorApp) as error:
         ingestar_archivo(b"esto no es un excel", "roto.xlsx", tmp_path)
     assert error.value.codigo == "E-ING-01"
+
+
+def _col(nombre: str, tipo: str) -> dict:
+    return {"nombre": nombre, "tipo": tipo}
+
+
+def test_diff_esquema_columnas_nuevas_y_perdidas():
+    anterior = [_col("id_venta", "entero"), _col("importe", "decimal")]
+    nuevo = [_col("id_venta", "entero"), _col("sucursal", "texto")]
+    diff = calcular_diff_esquema(anterior, nuevo, filas_anterior=10, filas_nuevo=10, campos_en_uso=set())
+    assert diff.columnas_nuevas == ["sucursal"]
+    assert diff.columnas_perdidas == ["importe"]
+    assert diff.columnas_perdidas_en_uso == []
+    assert diff.columnas_tipo_cambiado == []
+
+
+def test_diff_esquema_tipo_cambiado():
+    anterior = [_col("id_venta", "texto")]
+    nuevo = [_col("id_venta", "entero")]
+    diff = calcular_diff_esquema(anterior, nuevo, filas_anterior=5, filas_nuevo=5, campos_en_uso=set())
+    assert len(diff.columnas_tipo_cambiado) == 1
+    cambio = diff.columnas_tipo_cambiado[0]
+    assert cambio.nombre == "id_venta" and cambio.tipo_anterior == "texto" and cambio.tipo_nuevo == "entero"
+
+
+def test_diff_esquema_marca_solo_las_columnas_perdidas_que_el_modelo_usa():
+    """El caso que de verdad importa avisar: el modelo semantico referencia
+    una columna que la resubida se llevo puesta."""
+    anterior = [_col("id_venta", "entero"), _col("importe", "decimal"), _col("descuento", "decimal")]
+    nuevo = [_col("id_venta", "entero")]
+    diff = calcular_diff_esquema(anterior, nuevo, filas_anterior=5, filas_nuevo=5, campos_en_uso={"importe"})
+    assert set(diff.columnas_perdidas) == {"importe", "descuento"}
+    assert diff.columnas_perdidas_en_uso == ["importe"]  # "descuento" se perdio pero no lo usaba nadie
+
+
+def test_diff_esquema_delta_de_filas():
+    diff = calcular_diff_esquema([_col("a", "entero")], [_col("a", "entero")], filas_anterior=100, filas_nuevo=150, campos_en_uso=set())
+    assert diff.filas_antes == 100 and diff.filas_despues == 150
+    assert diff.hay_cambios() is True
+
+
+def test_diff_esquema_sin_cambios():
+    columnas = [_col("a", "entero"), _col("b", "texto")]
+    diff = calcular_diff_esquema(columnas, columnas, filas_anterior=10, filas_nuevo=10, campos_en_uso=set())
+    assert diff.hay_cambios() is False

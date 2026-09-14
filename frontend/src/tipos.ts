@@ -40,9 +40,21 @@ export interface Salud {
   entorno: string;
 }
 
+// Resubida con deteccion de cambios (fase 4): solo viaja cuando la fuente
+// ya existia (reemplazada=true), nada contra que comparar en un alta.
+export interface DiffEsquema {
+  columnas_nuevas: string[];
+  columnas_perdidas: string[];
+  // Subconjunto de columnas_perdidas que el modelo semantico actual usa.
+  columnas_perdidas_en_uso: string[];
+  columnas_tipo_cambiado: { nombre: string; tipo_anterior: string; tipo_nuevo: string }[];
+  filas_antes: number;
+  filas_despues: number;
+}
+
 export interface ResultadoTarea {
   // ingesta.procesar_archivo
-  fuentes?: { id: number; nombre_tabla: string; filas: number; reemplazada: boolean }[];
+  fuentes?: { id: number; nombre_tabla: string; filas: number; reemplazada: boolean; diff_esquema?: DiffEsquema }[];
   // inferencia.proponer_modelo
   version?: number;
   resumen?: string;

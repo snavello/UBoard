@@ -1975,3 +1975,81 @@ otros_filtros`, `test_grafico_no_grisa_si_su_propio_filtro_esta_activo`,
 `test_grafico_con_top_no_se_grisa`, `test_grafico_sin_otros_filtros_no_
 grisa` — 365 en total). Sin tests nuevos de frontend, mismo criterio de
 siempre.
+
+## 2026-09-13 — Resubida con detección de cambios (v0.30.01)
+
+Segundo pendiente de la "Fase 4 — Profundidad" original. Sd ya había
+contestado la pregunta clave de la sesión anterior: "por ahora vamos con
+total más diff. Luego quiero tener opciones para las dos alternativas,
+UBoard pretende ser una herramienta versátil de propósito general lo más
+amplia y adaptable posible". Dos decisiones en una frase: (1) arrancar
+por la opción chica (reemplazo total, como siempre, más un reporte de lo
+que cambió) y (2) dejar anotado que el esquema incremental/de novedades
+no está descartado — solo pospuesto, porque la ambición del proyecto es
+ser adaptable a distintos flujos de trabajo, no imponer uno solo. Queda
+registrado acá para cuando se retome: es un cambio de arquitectura
+bastante más grande (una clave declarada por fuente, decidir qué
+significa que una fila "no venga" en una subida nueva, el almacén deja de
+ser "un Parquet por fuente" nomás).
+
+El "diff de esquema" ya estaba anotado como pendiente desde el paso 3,
+literalmente en el comentario de `calcular_huella`: "base de la deteccion
+de cambios de esquema de la fase 4". Tocaba construirlo.
+
+La pieza central es `calcular_diff_esquema` en `app/ingesta/procesador.py`,
+una función pura que compara el esquema de ANTES de una resubida contra
+el de DESPUÉS: qué columnas aparecieron, cuáles desaparecieron, cuáles
+cambiaron de tipo, y cuánto cambió la cantidad de filas. La parte que
+vale la pena destacar es `columnas_perdidas_en_uso`: de todas las
+columnas que desaparecieron, cuáles el MODELO SEMÁNTICO actual todavía
+usa (`Campo.columna_origen` de la entidad ligada a esa fuente). Esto
+importa porque hoy, si resubís un archivo y se te cae una columna que tu
+modelo ya usa, el modelo persistido queda roto EN SILENCIO — nadie se
+entera hasta que alguien intenta abrir el dashboard o guardar una versión
+nueva del modelo y el compilador tira un error de columna inexistente.
+El diff avisa eso en el momento, en vez de dejarlo para que explote
+después en otro lugar.
+
+Para calcular esto hizo falta que `app/ingesta` (que hasta ahora no sabía
+nada de `app/modelo`) consulte el modelo semántico actual del workspace
+al registrar las fuentes. Se verificó primero que no hubiera riesgo de
+import circular (ni `app.modelo` ni lo que importa dependen de
+`app.ingesta`) antes de agregar la dependencia.
+
+Un detalle de implementación que valía la pena hacer bien:
+`registrar_fuentes` necesitaba el esquema y la cantidad de filas VIEJOS
+de la fuente ANTES de sobreescribirlos con los nuevos — el diff se
+calcula en el momento exacto donde el código ya sabe "esto es una
+resubida" (`fuente is not None`) pero todavía no tocó ninguno de los
+campos de la fila.
+
+El resultado de la tarea `ingesta.procesar_archivo` ahora lleva
+`diff_esquema` por cada fuente reemplazada (nunca en un alta: no hay
+nada contra qué comparar). Del lado del frontend, `Fuentes.tsx` muestra,
+debajo del resumen de siempre ("nombre_tabla: N filas (reemplazada)"),
+una línea en gris con el mismo lenguaje visual que ya usa el historial de
+versiones de modelo y dashboard desde el paso 17 (`+col1, col2` para lo
+nuevo, `−col1` para lo perdido, `~col1 (tipo1→tipo2)` para lo que cambió
+de tipo — `compartido/diff.ts` ganó `resumirDiffEsquema`, hermana de la
+`resumirDiff` que ya existía) y, si corresponde, una segunda línea
+aparte en rojo y negrita avisando qué columna en uso se perdió.
+
+Probado en Docker con una organización descartable, subiendo archivos de
+verdad a través del formulario del navegador (construyendo objetos
+`File` en memoria vía `DataTransfer` y disparando el evento `change` del
+`<input type="file">`, no solo llamando a la API directo, para ejercitar
+el camino real de subida). Se armó la secuencia completa: subir
+"ventas1.csv" con una columna "Importe", cargar un modelo mínimo que la
+usa, resubir sin esa columna — apareció el resumen correcto en gris
+("+sucursal · −importe · +1 filas") y, en rojo, "Tu modelo usa importe,
+que ya no está en el archivo nuevo." Por separado, se confirmó también el
+caso sin advertencia (una resubida que agrega y saca columnas que nadie
+usa) y el caso sin diff en absoluto (una fuente nueva).
+
+7 tests nuevos de backend (372 en total): 5 puros para
+`calcular_diff_esquema` en `test_ingesta_archivos.py` (columnas nuevas y
+perdidas, tipo cambiado, marca solo lo que el modelo usa, delta de filas,
+sin cambios) y 2 de API en `test_fuentes_api.py` (el caso de alta sin
+diff, y el caso completo de aviso con un modelo real cargado). 5 tests
+nuevos de vitest para `resumirDiffEsquema` (40 en total). Organización de
+prueba borrada al terminar.

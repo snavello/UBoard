@@ -19,6 +19,7 @@ from app.ingesta.encabezado import normalizar_nombre_columna
 from app.ingesta.lector_csv import TablaCruda, cargar_csv
 from app.ingesta.lector_excel import cargar_excel
 from app.ingesta.tipado import TAMANIO_MUESTRA, columna_sql, decidir_tipo, expresion_limpia, expresion_sql
+from app.modelo import operaciones as modelo_operaciones
 from app.nucleo.errores import ErrorApp
 from app.perfilado import perfilar
 
@@ -157,6 +158,61 @@ def calcular_huella(nombre_tabla: str, esquema: list[dict]) -> str:
     return hashlib.sha256(firma.encode()).hexdigest()[:16]
 
 
+@dataclass
+class ColumnaTipoCambiado:
+    nombre: str
+    tipo_anterior: str
+    tipo_nuevo: str
+
+
+@dataclass
+class DiffEsquema:
+    columnas_nuevas: list[str]
+    columnas_perdidas: list[str]
+    # Subconjunto de columnas_perdidas que el modelo semantico actual usa
+    # (Campo.columna_origen de la entidad de esta fuente): el caso que de
+    # verdad importa avisar, porque el modelo puede quedar roto.
+    columnas_perdidas_en_uso: list[str]
+    columnas_tipo_cambiado: list[ColumnaTipoCambiado]
+    filas_antes: int
+    filas_despues: int
+
+    def hay_cambios(self) -> bool:
+        return bool(self.columnas_nuevas or self.columnas_perdidas or self.columnas_tipo_cambiado or self.filas_antes != self.filas_despues)
+
+
+def calcular_diff_esquema(
+    esquema_anterior: list[dict],
+    esquema_nuevo: list[dict],
+    filas_anterior: int,
+    filas_nuevo: int,
+    campos_en_uso: set[str],
+) -> DiffEsquema:
+    """Resubida con deteccion de cambios (fase 4, "Profundidad" de la
+    especificacion): compara el esquema de ANTES de una resubida con el de
+    DESPUES. Decision de Sd: reemplazo total (como siempre) mas este reporte
+    informativo, no un esquema incremental/de novedades — eso queda para mas
+    adelante si hace falta. Pura: no toca la base ni el almacen, para poder
+    probarla sin ingesta real."""
+    anteriores = {columna["nombre"]: columna["tipo"] for columna in esquema_anterior}
+    nuevas = {columna["nombre"]: columna["tipo"] for columna in esquema_nuevo}
+    columnas_nuevas = sorted(set(nuevas) - set(anteriores))
+    columnas_perdidas = sorted(set(anteriores) - set(nuevas))
+    columnas_tipo_cambiado = [
+        ColumnaTipoCambiado(nombre=nombre, tipo_anterior=anteriores[nombre], tipo_nuevo=nuevas[nombre])
+        for nombre in sorted(set(anteriores) & set(nuevas))
+        if anteriores[nombre] != nuevas[nombre]
+    ]
+    return DiffEsquema(
+        columnas_nuevas=columnas_nuevas,
+        columnas_perdidas=columnas_perdidas,
+        columnas_perdidas_en_uso=sorted(set(columnas_perdidas) & campos_en_uso),
+        columnas_tipo_cambiado=columnas_tipo_cambiado,
+        filas_antes=filas_anterior,
+        filas_despues=filas_nuevo,
+    )
+
+
 def registrar_fuentes(
     sesion: Session,
     almacen: AlmacenArchivos,
@@ -166,21 +222,30 @@ def registrar_fuentes(
     archivo_origen: str,
     ruta_original: str | None,
     usuario_id: int | None,
-) -> list[tuple[Fuente, bool]]:
+) -> list[tuple[Fuente, bool, DiffEsquema | None]]:
     """Guarda cada Parquet en el almacen y crea o REEMPLAZA la fila `fuente`
     (misma nombre_tabla en el workspace = resubida). Devuelve
-    [(fuente, reemplazada)]."""
-    registradas = []
+    [(fuente, reemplazada, diff)]; `diff` es None para una fuente nueva (no
+    hay contra que comparar)."""
+    version_modelo = modelo_operaciones.version_actual(sesion, workspace)
+    modelo = modelo_operaciones.modelo_de(version_modelo) if version_modelo else None
+
+    registradas: list[tuple[Fuente, bool, DiffEsquema | None]] = []
     for resultado in resultados:
         esquema = resultado.esquema_como_dicts()
         fuente = sesion.scalar(
             select(Fuente).where(Fuente.workspace_id == workspace.id, Fuente.nombre_tabla == resultado.nombre_tabla)
         )
         reemplazada = fuente is not None
+        diff: DiffEsquema | None = None
         if fuente is None:
             fuente = Fuente(workspace_id=workspace.id, nombre_tabla=resultado.nombre_tabla, creada_por_id=usuario_id)
             sesion.add(fuente)
             sesion.flush()  # necesita el id para la ruta del Parquet
+        else:
+            entidad = next((e for e in modelo.entidades if e.fuente == resultado.nombre_tabla), None) if modelo else None
+            campos_en_uso = {campo.columna_origen for campo in entidad.campos} if entidad else set()
+            diff = calcular_diff_esquema(fuente.esquema, esquema, fuente.filas, resultado.filas, campos_en_uso)
         fuente.nombre = resultado.hoja or resultado.nombre_tabla
         fuente.archivo_origen = archivo_origen
         fuente.hoja = resultado.hoja
@@ -196,9 +261,9 @@ def registrar_fuentes(
         fuente.ruta_parquet = ruta_parquet_fuente(workspace.organizacion_id, workspace.id, fuente.id)
         with open(resultado.ruta_parquet_temporal, "rb") as archivo:
             almacen.guardar(fuente.ruta_parquet, archivo)
-        registradas.append((fuente, reemplazada))
+        registradas.append((fuente, reemplazada, diff))
     sesion.commit()
-    for fuente, _ in registradas:
+    for fuente, _, _ in registradas:
         sesion.refresh(fuente)
     return registradas
 
