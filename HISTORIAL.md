@@ -2053,3 +2053,104 @@ sin cambios) y 2 de API en `test_fuentes_api.py` (el caso de alta sin
 diff, y el caso completo de aviso con un modelo real cargado). 5 tests
 nuevos de vitest para `resumirDiffEsquema` (40 en total). Organización de
 prueba borrada al terminar.
+
+## 2026-09-14 — Reporte de calidad de datos (v0.31.01)
+
+Tercer pendiente de la "Fase 4 — Profundidad". Antes de tocar código se
+presentaron tres decisiones concretas y Sd contestó "si adelante" a las
+tres: (1) el reporte es **por fuente**, no un resumen de todo el
+workspace junto — mezclar problemas de tablas distintas en una sola
+lista no ayuda a nadie a actuar; (2) **cruza con el modelo semántico**
+cuando hay uno cargado, no se queda solo en lo que dice el esquema
+crudo de la fuente — una clave que dejó de ser única o una relación con
+huérfanos son problemas que solo el modelo puede ver; (3) se **calcula
+al vuelo**, en cada pedido, sin persistir nada. Esto último merece la
+explicación completa: el perfil (paso 9) se calcula una sola vez, en la
+ingesta, porque describe LOS DATOS y los datos no cambian solos. La
+calidad en cambio depende de los datos Y del modelo semántico, y el
+modelo cambia mucho más seguido — confirmar una relación, cambiar una
+clave primaria — sin que la fuente se resuba. Si el reporte se
+guardara con la fuente, quedaría desactualizado cada vez que alguien
+tocara el modelo sin tocar los datos. Calcularlo al pedido cuesta una
+vuelta más de DuckDB, pero nunca miente.
+
+Paquete nuevo, `app/calidad/`: `esquema.py` con los dos tipos
+(`ProblemaCalidad`, `ReporteCalidad`) y `analisis.py` con
+`calcular_reporte`, la función que arma la lista completa. Cinco tipos
+de problema, cada uno con severidad `alta`/`media`/`baja` (nunca solo un
+color — la lección del semáforo del wizard, paso 13, se repite acá):
+
+- **Nulos altos** y **valores inválidos** no piden nada nuevo a DuckDB:
+  ya están en `fuente.perfil` y `fuente.esquema`, calculados en la
+  ingesta. Nulos > 20 % de la columna = media, > 50 % = alta; inválidos
+  (un valor que no se pudo tipar, no uno que vino vacío) siempre alta a
+  partir de 5 %, porque un dato que se rompió al tipar es más grave que
+  uno que directamente no vino.
+- **Filas duplicadas exactas** sí es una consulta nueva:
+  `count(*) - count(DISTINCT (col1, col2, ...))` sobre todas las
+  columnas de la fuente. Antes de escribir los tests se probó la sintaxis
+  a mano contra DuckDB (3 filas con un par exactamente igual dieron
+  `(3, 2)`) para no descubrir un problema de sintaxis en medio de una
+  batería de tests.
+- **Clave primaria no única** y **huérfanos en relaciones confirmadas**
+  solo aparecen si hay un modelo cargado para esa fuente. Ambas
+  reproducen el mismo patrón de `_medir_inclusion` de
+  `inferencia/heuristicas.py` (conteo de inclusión entre dos columnas),
+  pero reimplementado aparte a propósito: esa función es privada de un
+  módulo que existe para proponer modelos nuevos, y calidad no tiene
+  nada que ver con eso — importarla hubiera sido acoplarse a un detalle
+  interno de otra pieza sin necesidad real.
+
+Nuevo endpoint `GET /workspaces/{id}/fuentes/{fuente_id}/calidad`, al
+lado del de perfil en `app/api/fuentes.py`. Frontend: un botón más,
+"Ver calidad", en la tarjeta de cada fuente en `Fuentes.tsx` (junto a
+"Ver perfil" y "Ver muestra"), y un componente nuevo `ListaCalidad` con
+una pastilla de severidad por problema — ícono (● alta, ◐ media, ○ baja)
+más la palabra, no solo color — y un mensaje tranquilo cuando no hay
+nada que avisar. Se evaluó reusar `Semaforo.module.css` (el de los
+semáforos del wizard) y se descartó a propósito: ahí "alta confianza"
+es verde/bueno, acá "alta severidad" es rojo/malo — mismo patrón visual
+de badge, pero la paleta tenía que ser otra o el color mentiría.
+
+13 tests nuevos (385 en total): 11 puros de `calcular_reporte` en
+`test_calidad.py` (uno por cada combinación relevante: sin problemas,
+cada tipo de problema por separado, varios combinados, con y sin
+modelo) y 2 de API en `test_fuentes_api.py` (una fuente sin modelo
+cargado, y una con modelo real — dos entidades y una relación
+confirmada — que efectivamente encuentra un huérfano).
+
+Verificado en Docker con una organización descartable ("PruebaCalidad").
+En el camino, dos tropiezos reales que vale la pena dejar anotados:
+
+Primero, un gotcha de entorno ya conocido reapareció: en esta shell de
+Windows/git-bash, `curl -F "campo=@archivo;type=..."` o `;filename=...`
+falla en silencio con el código 26, sin salida ni con `-v`. Se resuelve
+sacando el parámetro `;` y, si hace falta un nombre puntual, copiando el
+archivo con el nombre destino antes de subirlo con un `-F` a secas.
+
+Segundo, uno más interesante: el primer archivo de prueba armado a mano
+para disparar los cinco problemas a la vez (con varias filas con el
+importe vacío) subió con `filas: 3` y columnas `columna_1/2/3` en vez de
+`id_venta/id_vendedor/importe` — el archivo se leyó SIN encabezado. La
+causa no es un bug de la calidad de datos ni de esta sesión: es un caso
+límite de `detectar_fila_encabezado` (paso 3), que elige el "ancho más
+frecuente" contando celdas con dato por fila. Con más de la mitad de las
+filas de prueba con el importe vacío, el ancho de 2 celdas empató (o le
+ganó) al ancho de 3 celdas del encabezado y las filas completas, y el
+desempate — que no distingue cuál de los dos anchos empatados es
+realmente "la mayoría de los datos completos" — cayó del lado
+equivocado. Se resolvió rearmando el archivo de prueba con más filas
+para que la mayoría de columnas completas fuera clara (sin necesidad de
+tocar código: es una heurística preexistente, no algo que este paso
+haya roto), y queda anotado en el CLAUDE.md por si en algún momento
+conviene ajustar el desempate para que prefiera el ancho mayor entre
+candidatos, no cualquiera.
+
+Con el archivo bien armado (37 filas: id_venta duplicado con fila
+exactamente repetida, un id_vendedor=99 que no existe en vendedores,
+importe con 8 nulos y 3 valores no numéricos), el reporte por API
+devolvió los cinco problemas esperados con las severidades correctas
+(tres altas: inválidos, clave no única, huérfanos; dos medias: nulos,
+duplicados) y la pantalla de Fuentes los mostró igual, con las pastillas
+correctas; la fuente `vendedores`, sin problemas, mostró el estado
+vacío. Organización de prueba borrada al terminar.

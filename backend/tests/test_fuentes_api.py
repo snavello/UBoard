@@ -257,6 +257,66 @@ def test_perfil_de_fuente(cliente, datos, cola, ingresar):
     assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/perfil").status_code == 404
 
 
+def test_calidad_de_fuente(cliente, datos, cola, ingresar):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    csv_sucio = b"IdVenta,Vendedor\n1,Ana\n2,\n3,\n4,\n"
+    _procesar(cliente, cola, workspace_id, "ventas_sucias.csv", csv_sucio)
+    fuente = cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()[0]
+
+    respuesta = cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/calidad")
+    assert respuesta.status_code == 200, respuesta.text
+    reporte = respuesta.json()
+    assert reporte["fuente"] == "ventas_sucias" and reporte["filas"] == 4
+    problema = next(p for p in reporte["problemas"] if p["codigo"] == "nulos_altos")
+    assert problema["campo"] == "vendedor" and problema["severidad"] == "alta"  # 3 de 4 vacios
+
+    # El visualizador tambien puede verlo (es lectura); otra organizacion, no
+    ingresar("visualizador@acme.test")
+    assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/calidad").status_code == 200
+    ingresar("constructor@beta.test")
+    assert cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuente['id']}/calidad").status_code == 404
+
+
+def test_calidad_avisa_huerfanos_con_un_modelo_real_cargado(cliente, datos, cola, ingresar):
+    ingresar("constructor@acme.test")
+    workspace_id = datos.acme_workspace_id
+    _procesar(cliente, cola, workspace_id, "ventas.csv", b"IdVenta,IdVendedor\n1,1\n2,1\n3,99\n")
+    _procesar(cliente, cola, workspace_id, "vendedores.csv", b"IdVendedor,Nombre\n1,Ana\n2,Bruno\n")
+    fuentes = {fuente["nombre_tabla"]: fuente for fuente in cliente.get(f"/api/workspaces/{workspace_id}/fuentes").json()}
+
+    modelo = {
+        "entidades": [
+            {
+                "id": "ventas",
+                "nombre": "Ventas",
+                "fuente": "ventas",
+                "tipo": "hechos",
+                "clave_primaria": ["id_venta"],
+                "campos": [
+                    {"id": "id_venta", "columna_origen": "id_venta", "nombre": "Id venta", "tipo_dato": "entero", "tipo_semantico": "identificador"},
+                    {"id": "id_vendedor", "columna_origen": "id_vendedor", "nombre": "Vendedor", "tipo_dato": "entero", "tipo_semantico": "clave_foranea"},
+                ],
+            },
+            {
+                "id": "vendedores",
+                "nombre": "Vendedores",
+                "fuente": "vendedores",
+                "tipo": "dimension",
+                "clave_primaria": ["id_vendedor"],
+                "campos": [{"id": "id_vendedor", "columna_origen": "id_vendedor", "nombre": "Id vendedor", "tipo_dato": "entero", "tipo_semantico": "identificador"}],
+            },
+        ],
+        "relaciones": [{"id": "r1", "desde": {"entidad": "ventas", "campo": "id_vendedor"}, "hacia": {"entidad": "vendedores", "campo": "id_vendedor"}}],
+    }
+    respuesta_modelo = cliente.put(f"/api/workspaces/{workspace_id}/modelo", json=modelo)
+    assert respuesta_modelo.status_code == 201, respuesta_modelo.text
+
+    reporte = cliente.get(f"/api/workspaces/{workspace_id}/fuentes/{fuentes['ventas']['id']}/calidad").json()
+    problema = next(p for p in reporte["problemas"] if p["codigo"] == "huerfanos")
+    assert problema["detalle"]["huerfanos"] == 1 and problema["detalle"]["hacia"] == "vendedores"
+
+
 def test_fuente_sin_perfil_responde_e_ing_06(cliente, datos, cola, ingresar, sesion_db):
     from app.catalogo.tablas import Fuente
 

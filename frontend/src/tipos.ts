@@ -129,6 +129,21 @@ export interface PerfilFuente {
   candidatas_clave: string[];
 }
 
+// Reporte de calidad de datos (fase 4): al vuelo, no se persiste.
+export interface ProblemaCalidad {
+  codigo: string;
+  severidad: "alta" | "media" | "baja";
+  campo: string | null;
+  mensaje: string;
+  detalle: Record<string, unknown>;
+}
+
+export interface ReporteCalidad {
+  fuente: string;
+  filas: number;
+  problemas: ProblemaCalidad[];
+}
+
 export interface Muestra {
   columnas: string[];
   tipos: string[];

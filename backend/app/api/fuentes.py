@@ -14,11 +14,13 @@ from app.almacen.base import AlmacenArchivos
 from app.almacen.rutas import ruta_subida_original
 from app.api.tareas import TareaSalida, a_tarea_salida
 from app.api.workspaces import workspace_del_usuario
+from app.calidad import ReporteCalidad, calcular_reporte
 from app.catalogo.sesion import obtener_sesion
 from app.catalogo.tablas import EstadoFuente, Fuente, RolUsuario, Usuario, Workspace
 from app.consultas.motor import fuentes_listas, obtener_motor
 from app.ingesta.procesador import eliminar_fuente, validar_extension
 from app.ingesta.tarea import TIPO_TAREA_INGESTA
+from app.modelo import operaciones as modelo_operaciones
 from app.nucleo.auth import exigir_rol
 from app.nucleo.config import obtener_configuracion
 from app.nucleo.errores import ErrorApp
@@ -171,6 +173,33 @@ def perfil_de_fuente(fuente: Fuente = Depends(fuente_del_workspace)) -> PerfilFu
     if not fuente.perfil:
         raise ErrorApp("E-ING-06", f"fuente: {fuente.nombre_tabla}")
     return PerfilFuente.model_validate(fuente.perfil)
+
+
+@router.get("/{fuente_id}/calidad", response_model=ReporteCalidad)
+def calidad_de_fuente(
+    fuente: Fuente = Depends(fuente_del_workspace),
+    workspace: Workspace = Depends(workspace_del_usuario),
+    sesion: Session = Depends(obtener_sesion),
+    almacen: AlmacenArchivos = Depends(obtener_almacen),
+) -> ReporteCalidad:
+    """Reporte de calidad de datos (fase 4): traduce el perfil y el esquema
+    en problemas priorizados, mas duplicados exactos y (si hay un modelo
+    cargado) clave primaria no unica o huerfanos en relaciones confirmadas.
+    Al vuelo, nada se persiste."""
+    version_modelo = modelo_operaciones.version_actual(sesion, workspace)
+    modelo = modelo_operaciones.modelo_de(version_modelo) if version_modelo else None
+    conexion = obtener_motor().conexion(workspace.id, fuentes_listas(sesion, workspace), almacen)
+    try:
+        return calcular_reporte(
+            conexion,
+            nombre_tabla=fuente.nombre_tabla,
+            esquema=fuente.esquema,
+            filas=fuente.filas,
+            perfil=fuente.perfil,
+            modelo=modelo,
+        )
+    finally:
+        conexion.close()
 
 
 @router.delete("/{fuente_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[solo_constructor])

@@ -11,7 +11,7 @@ import { Marco } from "../compartido/componentes/Marco";
 import { resumirDiffEsquema } from "../compartido/diff";
 import { formatearCelda, formatearFecha, formatearNumero } from "../compartido/formato";
 import { useSesion } from "../compartido/sesion";
-import type { Fuente, Muestra, PerfilFuente, Tarea } from "../tipos";
+import type { Fuente, Muestra, PerfilFuente, ProblemaCalidad, ReporteCalidad, Tarea } from "../tipos";
 import estilos from "./Fuentes.module.css";
 
 const EXTENSIONES = ".csv,.txt,.tsv,.xlsx,.xlsm";
@@ -239,6 +239,7 @@ function PropuestaEnCurso({ workspaceId, tareaId, alTerminar }: { workspaceId: n
 function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceId: number; fuente: Fuente; onBorrar: () => void; borrando: boolean }) {
   const [verMuestra, setVerMuestra] = useState(false);
   const [verPerfil, setVerPerfil] = useState(false);
+  const [verCalidad, setVerCalidad] = useState(false);
   const perfil = useQuery({
     queryKey: ["perfil", workspaceId, fuente.id, fuente.huella, fuente.actualizada_en],
     queryFn: () => pedir<PerfilFuente>(rutaWorkspace(workspaceId, `/fuentes/${fuente.id}/perfil`)),
@@ -248,6 +249,11 @@ function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceI
     queryKey: ["muestra", workspaceId, fuente.id, fuente.huella],
     queryFn: () => pedir<Muestra>(rutaWorkspace(workspaceId, `/fuentes/${fuente.id}/muestra?filas=8`)),
     enabled: verMuestra,
+  });
+  const calidad = useQuery({
+    queryKey: ["calidad", workspaceId, fuente.id, fuente.huella, fuente.actualizada_en],
+    queryFn: () => pedir<ReporteCalidad>(rutaWorkspace(workspaceId, `/fuentes/${fuente.id}/calidad`)),
+    enabled: verCalidad,
   });
   const confirmarBorrado = () => {
     if (window.confirm(`¿Borrar la fuente "${fuente.nombre_tabla}"? Si el modelo la usa, va a dejar de validar.`)) onBorrar();
@@ -270,6 +276,9 @@ function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceI
           <button type="button" className="boton boton--chico" onClick={() => setVerMuestra((valor) => !valor)}>
             {verMuestra ? "Ocultar muestra" : "Ver muestra"}
           </button>
+          <button type="button" className="boton boton--chico" onClick={() => setVerCalidad((valor) => !valor)}>
+            {verCalidad ? "Ocultar calidad" : "Ver calidad"}
+          </button>
           <button type="button" className="boton boton--chico boton--peligro" onClick={confirmarBorrado} disabled={borrando}>
             Borrar
           </button>
@@ -286,6 +295,9 @@ function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceI
       {verPerfil && perfil.isPending && <Cargando chico texto="Leyendo el perfil…" />}
       {verPerfil && perfil.isError && <AvisoError error={perfil.error} />}
       {verPerfil && perfil.data && <TablaPerfil perfil={perfil.data} />}
+      {verCalidad && calidad.isPending && <Cargando chico texto="Revisando la calidad…" />}
+      {verCalidad && calidad.isError && <AvisoError error={calidad.error} />}
+      {verCalidad && calidad.data && <ListaCalidad reporte={calidad.data} />}
       {verMuestra && muestra.isPending && <Cargando chico texto="Leyendo filas…" />}
       {verMuestra && muestra.isError && <AvisoError error={muestra.error} />}
       {verMuestra && muestra.data && (
@@ -315,6 +327,36 @@ function TarjetaFuente({ workspaceId, fuente, onBorrar, borrando }: { workspaceI
         </div>
       )}
     </article>
+  );
+}
+
+const ICONO_SEVERIDAD: Record<ProblemaCalidad["severidad"], string> = { alta: "●", media: "◐", baja: "○" };
+const ETIQUETA_SEVERIDAD: Record<ProblemaCalidad["severidad"], string> = { alta: "Alta", media: "Media", baja: "Baja" };
+
+/* Reporte de calidad de datos (fase 4): traduce el perfil, el tipado y (si
+   hay un modelo cargado) las claves y relaciones confirmadas en problemas
+   priorizados. Nunca solo color: icono + palabra en cada nivel, mismo
+   criterio que el Semaforo del wizard. */
+function ListaCalidad({ reporte }: { reporte: ReporteCalidad }) {
+  const claseSeveridad: Record<ProblemaCalidad["severidad"], string> = {
+    alta: estilos.severidadAlta,
+    media: estilos.severidadMedia,
+    baja: estilos.severidadBaja,
+  };
+  if (reporte.problemas.length === 0) {
+    return <p className={`secundario ${estilos.calidadVacia}`}>✓ No encontramos problemas de calidad en estos datos.</p>;
+  }
+  return (
+    <ul className={estilos.calidad}>
+      {reporte.problemas.map((problema, indice) => (
+        <li key={indice} className={estilos.problemaCalidad}>
+          <span className={`${estilos.severidad} ${claseSeveridad[problema.severidad]}`}>
+            <span aria-hidden="true">{ICONO_SEVERIDAD[problema.severidad]}</span> {ETIQUETA_SEVERIDAD[problema.severidad]}
+          </span>
+          <span>{problema.mensaje}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -850,6 +850,63 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     advertencia en rojo tal cual se diseñó. 7 tests nuevos de backend
     (372 en total: 5 puros de `calcular_diff_esquema` + 2 de API) y 5 de
     vitest para `resumirDiffEsquema` (40 en total).
+  - Reporte de calidad de datos: HECHO 2026-09-14 (v0.31.01). Tercer
+    pendiente de "Fase 4 — Profundidad". Presentadas 3 decisiones y Sd
+    las confirmó todas: (1) el reporte es **por fuente** (no por
+    workspace completo, para no mezclar problemas de tablas distintas en
+    una sola lista); (2) **cruza con el modelo semántico** cuando hay uno
+    cargado (clave primaria y relaciones confirmadas), no se queda solo
+    en lo que dice el esquema de la fuente; (3) se **calcula al vuelo**
+    en cada pedido, sin persistir nada — a diferencia del perfil (que se
+    calcula una vez en la ingesta), un reporte de calidad vive de la
+    fuente Y del modelo, y el modelo cambia mucho más seguido que los
+    datos. Paquete nuevo `app/calidad/` (`esquema.py` con
+    `ProblemaCalidad`/`ReporteCalidad`, `analisis.py` con
+    `calcular_reporte`); `GET /workspaces/{id}/fuentes/{fuente_id}/calidad`
+    (`app/api/fuentes.py`, junto al de perfil). Problemas detectados, cada
+    uno con severidad `alta`/`media`/`baja`: **nulos altos** (columna con
+    más de 20% de vacíos = media, más de 50% = alta) y **valores
+    inválidos** (más de 5% de valores que no se pudieron tipar = siempre
+    alta) salen directo de `fuente.perfil`/`esquema`, sin tocar DuckDB de
+    nuevo; **filas duplicadas exactas** es una consulta nueva
+    (`count(*) - count(DISTINCT (col1, col2, ...))`, verificada a mano
+    antes de confiar en la sintaxis de DuckDB); y, solo si hay un modelo
+    cargado para esa fuente, **clave primaria no única** (la de la
+    entidad dejó de ser única bajo los datos actuales) y **huérfanos en
+    relaciones confirmadas** (filas del lado "muchos" que referencian un
+    valor que no existe del lado "uno"), dos consultas nuevas que
+    reproducen el mismo patrón de `_medir_inclusion` de
+    `inferencia/heuristicas.py` pero reimplementado aparte a propósito
+    (esa función es privada del módulo de heurísticas; acoplarse a ella
+    hubiera sido una dependencia rara para una pieza que no tiene nada
+    que ver con inferir un modelo nuevo). Frontend: botón "Ver calidad"
+    nuevo en cada tarjeta de `Fuentes.tsx` (al lado de "Ver perfil" y
+    "Ver muestra"), componente `ListaCalidad` con una pastilla de
+    severidad por problema (ícono ● alta / ◐ media / ○ baja + la palabra,
+    nunca solo color) y un mensaje "No encontramos problemas de calidad
+    en estos datos" cuando el reporte viene vacío; estilos nuevos en vez
+    de reusar `Semaforo.module.css` porque su alta confianza = verde
+    (bueno) es semánticamente lo contrario de una severidad alta = rojo
+    (malo) — mismo patrón de badge, paleta distinta. 13 tests nuevos (385
+    en total): 11 puros de `calcular_reporte` (`test_calidad.py`) + 2 de
+    API (una fuente sin modelo, y una con modelo real cargado que
+    confirma huérfanos). Verificado en Docker con una organización
+    descartable ("PruebaCalidad"): una fuente `ventas` armada a propósito
+    con fila duplicada exacta, un `id_venta` repetido, un `id_vendedor`
+    huérfano (no existe en `vendedores`), y una columna `importe` con
+    nulos y valores no numéricos mostró los cinco problemas a la vez con
+    las severidades esperadas (3 altas, 2 medias); la fuente `vendedores`,
+    limpia, mostró el estado vacío. De paso, un hallazgo real (no es un
+    bug del código, es un caso límite de la heurística de encabezado
+    existente desde el paso 3): un CSV de prueba donde más de la mitad de
+    las filas tenían una celda vacía al final empató el "ancho más
+    frecuente" entre filas completas e incompletas, y `detectar_fila_encabezado`
+    (que desempata sin mirar cuál de los dos anchos es mayoría real)
+    terminó leyendo el archivo sin encabezado — se resolvió armando el
+    archivo de prueba con más filas para que la mayoría fuera clara, sin
+    tocar código; queda anotado por si en algún momento vale la pena
+    hacer que el desempate prefiera el ancho más frecuente ENTRE los
+    candidatos de mayor ancho, no cualquiera.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -952,6 +1009,24 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - El perfil vive en `fuente.perfil` (JSONB nullable): una fuente ingestada
   antes del paso 9 no lo tiene y el endpoint responde E-ING-06 hasta que se
   resuba. El frontend lo pide con la huella y `actualizada_en` en la clave.
+
+## Reglas de calidad de datos (vigentes desde la fase 4, "Profundidad")
+- `app/calidad/` (`esquema.py`, `analisis.py`) es independiente de
+  `perfilado/` e `inferencia/`: **no persiste nada**, `calcular_reporte`
+  se corre al vuelo en cada pedido a `GET .../fuentes/{id}/calidad`. Los
+  problemas que salen del perfil/esquema ya calculado (nulos altos,
+  valores inválidos) son gratis; los que necesitan mirar los datos de
+  nuevo (filas duplicadas, clave no única, huérfanos) son consultas
+  DuckDB nuevas, chicas y acotadas a esa fuente.
+- Severidad siempre `alta`/`media`/`baja`, nunca solo un color: nulos > 20 %
+  = media, > 50 % = alta; inválidos > 5 % = siempre alta (un valor que no
+  se pudo tipar es más grave que uno que directamente vino vacío).
+- Clave no única y huérfanos solo aparecen si hay un modelo semántico
+  cargado para esa fuente (si no, no hay clave ni relación declarada
+  contra qué comparar). Reimplementado aparte de
+  `inferencia/heuristicas._medir_inclusion` a propósito: es privada de
+  ese módulo y calidad no tiene nada que ver con proponer un modelo
+  nuevo, acoplarse hubiera sido una dependencia sin sentido.
 
 ## Reglas de inferencia (vigentes desde el paso 10)
 - `proponer_modelo(conexion, fuentes)` es puro: recibe `FuentePerfilada`
@@ -1330,9 +1405,10 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   se descartan todas las consultas cacheadas MENOS `["yo"]`: un `clear()`
   deja al observador de `useQuery` apuntando a una consulta muerta.
 - **Constructor mínimo**: Fuentes (subida múltiple con polling de tareas,
-  esquema por fuente, muestra, borrar) y Modelo (editor JSON con Validar /
-  Guardar versión / cargar archivo, para el modelo y para el spec, con lista
-  de versiones). Lo reemplazan el wizard (fase 2) y el chat (fase 3).
+  esquema por fuente, muestra, calidad, borrar) y Modelo (editor JSON con
+  Validar / Guardar versión / cargar archivo, para el modelo y para el
+  spec, con lista de versiones). Lo reemplazan el wizard (fase 2) y el
+  chat (fase 3).
 - Google Fonts se carga por `<link>` en `index.html` con fallbacks
   (Georgia, Segoe UI). Pendiente vendorear las fuentes antes de producción.
 - **Chat del asistente** (`asistente/Chat.tsx`, pasos 20 y 21): un solo
