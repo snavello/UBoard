@@ -998,6 +998,68 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     prosa, sin un patrón por línea) como su propio ítem más adelante — es
     extracción de información, un problema distinto de "parsear una
     tabla con estructura repetida".
+  - Almacén persistente y deploy en Render: EN CURSO, 2026-09-14 (v0.33.01).
+    Quinto y último pendiente de "Fase 4 — Profundidad". **Decisión que
+    cambia lo que decía la especificación original**: en vez de Cloudflare
+    R2 (`AlmacenS3`, la opción que preveía `docs/especificacion-v1.md`),
+    se usa un **disco persistente de Render**. Se le explicó a Sd
+    conceptualmente qué es S3/R2/DuckDB en esto (R2 es un proveedor que
+    habla el protocolo estándar S3; DuckDB puede leer un Parquet directo
+    de una URL `s3://` sin bajarlo entero) y se investigaron precios
+    reales antes de decidir (no de memoria): disco de Render, USD 0,25
+    por GB al mes, sin nivel gratis; R2, gratis hasta 10 GB y sin cobrar
+    egress, pero cuenta nueva + código nuevo (`boto3`, configurar DuckDB
+    para S3, tests con mocks). Sd ya tiene un plan pago de Render (y ya
+    había usado discos de Render antes) — confirmó ir por ahí: "sí
+    claramente, ya use render disk". Ganancia real de simpleza, no solo
+    de plata: `AlmacenLocal` (existente desde el paso 2) ya funciona con
+    cualquier carpeta, sea el disco local o un disco persistente de
+    Render — **cero código nuevo en `app/almacen/`**. Limitación real de
+    un disco de Render, confirmada en su documentación: solo lo puede
+    usar UNA instancia del servicio (no se puede escalar horizontalmente
+    con disco pegado) — no es un problema para UBoard hoy, la cola de
+    tareas ya corre en un solo hilo de un solo proceso.
+
+    Lo construido: `render.yaml` en la raíz del repo (Blueprint de
+    Render: servicio web `runtime: docker` apuntando al `Dockerfile`
+    existente sin cambios, disco persistente montado en `/datos/almacen`
+    — mismo path que ya usa el volumen de `docker-compose.yml` en local,
+    para que `RUTA_ALMACEN` valga lo mismo en los dos entornos —
+    `DATABASE_URL`/`SECRETO_SESION`/`ANTHROPIC_API_KEY` marcados
+    `sync: false` para que Render los pida al crear el Blueprint, nunca
+    escritos por Claude Code en ningún archivo). Deliberadamente **no**
+    se declaró el Postgres existente de Sd como recurso del blueprint
+    (`databases:`): declarar uno con el mismo nombre corre el riesgo de
+    que Render intente crear uno nuevo en vez de adoptar el que ya
+    existe — más seguro que Sd copie la Internal Database URL a mano
+    desde el dashboard de su Postgres ya creado.
+
+    Arreglo real encontrado investigando la documentación de Render (no
+    en un test, antes de que fallara en el deploy real): los servicios
+    Docker de Render pasan `PORT=10000` por defecto al contenedor, pero
+    `docker/entrypoint.sh` tenía el puerto 8000 fijo — el healthcheck de
+    Render hubiera fallado. `entrypoint.sh` ahora usa `--port
+    "${PORT:-8000}"` (respeta `$PORT` si está seteada, si no sigue
+    siendo 8000 como en Docker Compose local, sin cambiar nada del uso
+    diario). Verificado con un contenedor suelto (`docker run -e
+    PORT=10000 ...`, sin tocar el `docker-compose.yml` de siempre): el
+    log mostró "Uvicorn running on http://0.0.0.0:10000" y el healthcheck
+    respondió 200 — confirma el arreglo antes de depender de que
+    funcionara recién en Render. `docker compose up --build` local
+    verificado sin cambios de comportamiento (sigue en 8000, sin `$PORT`
+    seteada).
+
+    **Falta, y le corresponde a Sd** (no es algo que Claude Code pueda
+    hacer por él — crear recursos en una cuenta de pago ajena está fuera
+    de lo que se hace sin permiso explícito, y acá ni siquiera hay acceso
+    a la cuenta): crear el Blueprint desde el dashboard de Render
+    apuntando a este repo, pegar la Internal Database URL de su Postgres
+    existente y un `SECRETO_SESION` generado al azar cuando Render los
+    pida, confirmar que la región del servicio web coincide con la del
+    Postgres, y verificar que los datos sobreviven a un redeploy (subir
+    una fuente, forzar un redeploy manual, confirmar que la fuente sigue
+    ahí). Sin tests de backend nuevos (es infraestructura, no código
+    Python con lógica que testear) — 405 tests de siempre en verde.
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -1635,3 +1697,7 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
 - Tests (desde `backend/`): `for f in tests/test_*.py; do ../.venv/Scripts/python.exe -m pytest "$f" || break; done`
 - Tests del frontend: `cd frontend && npx vitest run` (y `npm run build` corre `tsc -b`).
 - Todo en Docker como producción: `docker compose up --build`.
+- Deploy en Render: `render.yaml` en la raíz (Blueprint). Desde el
+  dashboard de Render, "New" → "Blueprint" apuntando a este repo; ver la
+  entrada "Almacén persistente y deploy en Render" más arriba para el
+  detalle de qué pide Render al crearlo.

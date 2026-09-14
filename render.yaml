@@ -1,0 +1,53 @@
+# Blueprint de Render para el deploy de UBoard (fase 4, "Profundidad").
+#
+# Decision de Sd (2026-09-14): disco persistente de Render en vez de
+# Cloudflare R2 (que sugeria la especificacion original) — ya tiene un plan
+# pago de Render, asi que evita una cuenta y una libreria nuevas (boto3) sin
+# codigo nuevo: AlmacenLocal ya funciona con cualquier carpeta, sea la del
+# disco local o un disco persistente de Render. Limitacion real (documentada
+# por Render): un disco solo lo puede usar UNA instancia del servicio, no se
+# puede escalar horizontalmente con disco pegado — no es un problema hoy,
+# la cola de tareas de UBoard ya corre en un solo hilo de un solo proceso.
+#
+# Uso: en el dashboard de Render, "New" -> "Blueprint", apuntar a este repo.
+# Render lee este archivo y arma el servicio solo; pide los valores marcados
+# "sync: false" (los secretos) en el momento de crearlo. Ver la seccion
+# "Deploy en Render" de CLAUDE.md para el paso a paso completo.
+
+services:
+  - type: web
+    name: uboard
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Un disco persistente necesita un plan pago (el free tier no admite
+    # disco). "starter" es el mas chico; subilo desde el dashboard si hace
+    # falta mas memoria/CPU para la inferencia con Claude.
+    plan: starter
+    # OJO: tiene que ser la MISMA region donde ya esta tu Postgres, para que
+    # la conexion use la red interna de Render (gratis y mas rapida) en vez
+    # de salir a internet. Cambiala si tu Postgres no esta en Oregon.
+    region: oregon
+    branch: main
+    healthCheckPath: /api/salud
+    disk:
+      name: uboard-almacen
+      # Mismo path que usa el volumen de docker-compose.yml en local, para
+      # que RUTA_ALMACEN valga lo mismo en los dos entornos.
+      mountPath: /datos/almacen
+      # 1 o multiplos de 5 (regla de Render). Se puede agrandar despues sin
+      # perder datos; achicarlo no se puede.
+      sizeGB: 5
+    envVars:
+      - key: RUTA_ALMACEN
+        value: /datos/almacen
+      - key: ENTORNO
+        value: prod
+      # Secretos: Render los pide en el momento de crear el Blueprint. Nunca
+      # van en este archivo ni los escribe Claude Code en ningun lado.
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRETO_SESION
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

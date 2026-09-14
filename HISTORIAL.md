@@ -2274,3 +2274,85 @@ compacto, reintento con feedback, dos fallos da `E-INF-06`) + 4 de API
 en `test_fuentes_api.py` (proponer y confirmar de punta a punta, receta
 ajustada por la persona antes de confirmar, tarea ajena o inexistente
 no pasa, sin clave de Claude da `E-INF-07`).
+
+## 2026-09-14 — Almacén persistente y deploy en Render (v0.33.01, en curso)
+
+Quinto y último pendiente de "Fase 4 — Profundidad". Apenas se preguntó
+por el estado de las cuentas necesarias (Cloudflare R2 y Render, que la
+especificación original pedía como aporte de Sd), surgió algo más
+interesante que simplemente "armar lo que decía la especificación": Sd
+ya tenía el workspace de Render con una instancia de Postgres, pero no
+sabía cómo seguir con el resto — y, en medio de la explicación, preguntó
+directamente si no había "algo más sencillo" que Cloudflare R2.
+
+Antes de contestar de memoria se buscaron precios reales: un disco
+persistente de Render sale USD 0,25 por GB al mes, sin nivel gratis;
+Cloudflare R2 es gratis hasta 10 GB y no cobra nunca por transferencia
+de salida (egress), pero implica una cuenta nueva y código nuevo
+(`boto3`, configurar DuckDB para leer `s3://`, tests con mocks). La
+respuesta honesta no era "cuál es más barato" sino "cuál es más
+simple" — que era literalmente lo que Sd había preguntado — y ahí el
+disco de Render gana claro: `AlmacenLocal`, que ya existe desde el paso
+2, funciona con **cualquier** carpeta, sea el disco de la PC o un disco
+persistente de Render. Cero código nuevo en `app/almacen/`. Se le
+explicó además la única limitación real de un disco de Render
+(confirmada en su documentación, no supuesta): solo lo puede usar UNA
+instancia del servicio, nada de escalar horizontalmente con un disco
+pegado — irrelevante para UBoard hoy, la cola de tareas ya es un solo
+hilo de un solo proceso. Sd contestó "sí claramente, ya use render
+disk" — ya tenía experiencia previa con esa pieza puntual, lo que hizo
+la decisión todavía más fácil.
+
+Esto significa que la especificación original (que decía explícitamente
+"Cloudflare R2 en Render") quedó revisada en los hechos por una decisión
+tomada en conjunto con Sd, con la razón documentada: no es que R2 fuera
+una mala idea, es que dado que Sd YA paga Render y el volumen de datos
+de UBoard es chico, la opción más simple gana sin sacrificar nada real.
+
+Con el almacén resuelto sin código, lo que quedó por construir fue
+puramente infraestructura de deploy. `render.yaml` en la raíz del repo
+(Blueprint de Render): un servicio web `runtime: docker` que usa el
+`Dockerfile` existente TAL CUAL (nada que tocar ahí, ya se buildea igual
+en Docker Compose local desde el paso 0), un disco persistente montado
+en `/datos/almacen` — a propósito el mismo path que ya usa el volumen de
+`docker-compose.yml`, así `RUTA_ALMACEN` no cambia de valor entre local
+y producción — y las tres variables que de verdad son secretas
+(`DATABASE_URL`, `SECRETO_SESION`, `ANTHROPIC_API_KEY`) marcadas
+`sync: false`, para que Render las pida en el momento de crear el
+Blueprint y nunca queden escritas en ningún archivo del repo. Una
+decisión chica pero deliberada: el Postgres que Sd ya tiene creado en
+Render NO se declaró como recurso del blueprint (`databases:`) — hacerlo
+corre el riesgo real de que Render, al no reconocerlo como exactamente
+el mismo recurso, intente crear uno nuevo en vez de adoptar el
+existente. Más seguro que Sd copie la Internal Database URL a mano desde
+el dashboard del Postgres que ya tiene.
+
+Investigando la documentación real de Render (no adivinando) apareció un
+detalle que hubiera roto el primer deploy en silencio: los servicios
+Docker de Render le pasan al contenedor una variable `PORT`, por defecto
+`10000` — pero `docker/entrypoint.sh` tenía el puerto 8000 escrito fijo
+en el comando de `uvicorn`. Sin el arreglo, el healthcheck de Render
+hubiera fallado contra un puerto donde no hay nada escuchando, y el
+deploy nunca hubiera quedado sano. Se cambió a `--port "${PORT:-8000}"`
+(si `$PORT` está seteada la usa, si no sigue siendo 8000 como siempre) y
+se verificó DE VERDAD antes de confiar en que funcionara recién en
+Render: un contenedor suelto con `docker run -e PORT=10000 ...` (sin
+tocar el `docker-compose.yml` de siempre) mostró en el log "Uvicorn
+running on http://0.0.0.0:10000" y el healthcheck respondió 200 OK.
+Repetido después el `docker compose up --build` normal para confirmar
+que el comportamiento local (puerto 8000, sin `$PORT` seteada) no
+cambió en nada.
+
+Sin tests de backend nuevos — no hay lógica Python nueva que testear,
+es configuración de infraestructura — pero se corrió la suite completa
+de todas formas como red de seguridad (405 tests en verde, sin cambios).
+
+Queda pendiente, y le corresponde a Sd (no es algo que se pueda hacer
+sin su cuenta ni su permiso explícito): crear el Blueprint desde su
+dashboard de Render apuntando a este repo, cargar la Internal Database
+URL de su Postgres existente y un `SECRETO_SESION` generado al azar
+cuando Render los pida, confirmar que la región del servicio web
+coincide con la de su Postgres, y hacer la prueba real de persistencia
+(subir una fuente, forzar un redeploy manual, confirmar que la fuente
+sigue ahí después). Con eso cerrado, se completan los 5 ítems de
+"Fase 4 — Profundidad".
