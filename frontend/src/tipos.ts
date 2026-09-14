@@ -346,7 +346,11 @@ export interface GraficoSalida {
   titulo: string;
   metrica: { id: string; nombre: string; formato: Formato };
   dimension: ColumnaSalida;
-  filas: [unknown, number | null][];
+  // disponible=false (filtrado asociativo, fase 4): el valor existe en el
+  // universo del campo pero no tiene datos bajo los otros filtros activos;
+  // se pinta en gris en vez de faltar directamente. Solo en barras/torta
+  // sin "top".
+  filas: [unknown, number | null, boolean][];
 }
 
 export interface ColumnaExplorador {

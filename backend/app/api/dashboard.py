@@ -76,6 +76,11 @@ class GraficoSalida(BaseModel):
     titulo: str
     metrica: dict[str, Any]
     dimension: ColumnaSalida
+    # [valor_dimension, valor_metrica, disponible]. `disponible=False` es el
+    # filtrado asociativo en los graficos (fase 4): un valor del universo del
+    # campo que no aparece en los datos reales bajo los OTROS filtros activos
+    # se agrega igual, con valor None, para que el frontend lo pinte en gris
+    # en vez de que directamente desaparezca (ver `grafico()` mas abajo).
     filas: list[list[Any]]
 
 
@@ -279,19 +284,40 @@ def kpis(contexto: ContextoDashboard = Depends(contexto_dashboard)) -> list[KpiS
 
 @router.get("/graficos/{grafico_id}", response_model=GraficoSalida)
 def grafico(grafico_id: str, contexto: ContextoDashboard = Depends(contexto_dashboard)) -> GraficoSalida:
+    """Un gráfico (barras/torta/línea) con sus filas. Filtrado asociativo en
+    barras y torta SIN `top` (fase 4): si la dimensión coincide con el campo
+    de un filtro de lista que no está activo, y hay OTROS filtros activos, se
+    agrega al universo completo del campo lo que falte para completarlo,
+    marcado `disponible=False` — así una categoría que quedó en cero por los
+    otros filtros se ve gris en vez de desaparecer del gráfico. Si la propia
+    dimensión ya está filtrada, no tiene sentido grisar el resto (la persona
+    ya eligió exactamente qué quiere ver)."""
     grafico_spec = contexto.spec.grafico(grafico_id)
     if grafico_spec is None:
         raise ErrorApp("E-SPEC-04", f"grafico: {grafico_id!r}")
     resultado = contexto.consultar(paneles.consulta_grafico(grafico_spec, contexto.filtros))
     metrica = contexto.modelo.metrica(grafico_spec.metrica)
     dimension = resultado.columnas[0]
+    filas: list[list[Any]] = [[fila[0], fila[1], True] for fila in resultado.filas]
+    if grafico_spec.tipo in ("barras", "torta") and grafico_spec.top is None:
+        filtro_propio = next((f for f in contexto.spec.filtros if f.tipo == "lista" and f.campo == grafico_spec.dimension), None)
+        propio_activo = any(f.campo == grafico_spec.dimension for f in contexto.filtros)
+        otros_filtros_activos = any(f.campo != grafico_spec.dimension for f in contexto.filtros)
+        if filtro_propio is not None and not propio_activo and otros_filtros_activos:
+            universo = contexto.consultar(paneles.consulta_opciones_lista(grafico_spec.dimension))
+            valores_con_datos = {fila[0] for fila in resultado.filas}
+            filas.extend(
+                [valor_fila[0], None, False]
+                for valor_fila in universo.filas
+                if valor_fila[0] is not None and valor_fila[0] not in valores_con_datos
+            )
     return GraficoSalida(
         id=grafico_spec.id,
         tipo=grafico_spec.tipo,
         titulo=grafico_spec.titulo or f"{metrica.nombre} por {grafico_spec.dimension}",
         metrica={"id": metrica.id, "nombre": metrica.nombre, "formato": metrica.formato},
         dimension=ColumnaSalida(nombre=grafico_spec.dimension, tipo=dimension.tipo, clase="dimension", granularidad=dimension.granularidad),
-        filas=resultado.filas,
+        filas=filas,
     )
 
 

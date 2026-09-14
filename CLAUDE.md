@@ -761,6 +761,59 @@ Fase 2, del 2026-09-09 (15 dudas respondidas en `docs/fase2-lectura-y-plan.md` �
     **Pendiente en el backlog, sin fecha**: ventanas libres, movibles y
     redimensionables (fuera del alcance de "reordenar dentro de una
     sección" que ya existe).
+  - Filtrado asociativo completo (gráficos en gris): HECHO 2026-09-13
+    (v0.29.01). Con fase 3 y 4 aceptadas, Sd pidió avanzar con el resto de
+    la fase 4 "Profundidad" de la especificación original: filtrado
+    asociativo completo, texto estructurado, calidad de datos, resubida
+    con detección de cambios, y S3/deploy — en el orden que se considerara
+    mejor. Se armó primero el orden (asociativo → resubida → calidad →
+    texto estructurado → S3/deploy, con la conversación de "esquemas de
+    actualización" ligada a resubida, recomendando arrancar por reemplazo
+    total + reporte de diff en vez de un esquema de novedades/incremental
+    hasta confirmar que realmente hace falta) y Sd lo confirmó; después se
+    presentaron 3 decisiones concretas para esta pieza (consultado el
+    skill `dataviz` antes de proponer el tratamiento visual, que resultó
+    ser exactamente el patrón **"emphasis"** del skill: disponible en el
+    acento, el resto en gris de-emphasis): (1) alcance = mismos gráficos
+    que ya son clickeables por el paso A (barras/torta cuya dimensión
+    coincide con un filtro `lista`), las líneas de tiempo quedan afuera;
+    (2) tratamiento visual = universo completo del campo, grisando lo que
+    de cero bajo los otros filtros, en vez de que directamente desaparezca;
+    (3) los gráficos con `top` (ej. "Top vendedores") NO participan —
+    mezclar "el ranking de los mejores N" con "el universo completo
+    grisado" contradice el propósito del ranking. Sd confirmó las tres.
+    **Sin tocar `consultas/compilador.py`** (sigue siendo el único que
+    escribe SQL): `GET /dashboard/graficos/{id}` arma la consulta normal
+    de siempre (con TODOS los filtros activos) y, solo si el tipo es
+    barras/torta sin `top` y hay un filtro `lista` para esa dimensión que
+    NO está el mismo activo, además pide el universo completo del campo
+    (reusa `consulta_opciones_lista`, ya existía) y agrega al final los
+    valores que no aparecen en los datos reales, con `valor=None` y
+    `disponible=False`. Si el propio filtro de esa dimensión ya está
+    activo, no se grisa nada (la persona ya eligió exactamente qué
+    quiere ver); si no hay NINGÚN otro filtro activo, tampoco (no hay
+    nada que pudiera haber dejado algo en cero, se ahorra la consulta
+    extra) — mismos dos recortes que ya tenía `disponibles` en las
+    opciones de filtro (paso 26). `GraficoSalida.filas` pasa de
+    `[valor, metrica]` a `[valor, metrica, disponible]` (aditivo, el
+    frontend ya solo leía `fila[0]`/`fila[1]`). Frontend
+    (`compartido/graficos/opciones.ts`): en barras, una entrada no
+    disponible se manda como `{value: 0, itemStyle: {color: --mudo},
+    label: {show: false}}` en vez de un número — la categoría sigue en
+    el eje (con su etiqueta), pero sin barra visible ni valor, y un
+    tooltip a medida le avisa "Sin datos con los filtros activos" en vez
+    del `valueFormatter` genérico; en torta, la porción en gris casi no
+    se ve (0° de arco) pero el nombre sigue listado en la leyenda, que es
+    igual de honesto (no hay forma de "grisar visiblemente" una porción
+    de tamaño cero). Probado en Docker contra la demo real (solo
+    lecturas, nada que limpiar): un rango de fecha sin ningún dato deja
+    TODAS las categorías en gris con sus nombres visibles; un vendedor +
+    3 días concretos mostró un caso mixto real (5 categorías con barra
+    violeta y valor, "Bebidas" sin barra ni valor); un filtro por la
+    propia dimensión del gráfico no grisa nada; "Top vendedores" (con
+    `top`) nunca agrega grises aunque el resto esté en cero. 4 tests
+    nuevos de API (365 en total); sin tests nuevos de frontend (se
+    verifica en el navegador, mismo criterio de siempre).
 
 ## Accesos de la demo local
 Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
@@ -1149,10 +1202,9 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   `disponibles` — el subconjunto que sigue dando resultado bajo los OTROS
   filtros activos, `None` si no hay otros activos (un filtro nunca se
   restringe a si mismo: `ContextoDashboard.filtros_sin(filtro_id)`) — así
-  el frontend puede grisar sin sacar nada de la lista. Los gráficos
-  todavía no se pintan en gris (aplazado). Las opciones de `rango_fecha`
-  siguen siendo mínimo y máximo globales, sin restringir por los otros
-  filtros.
+  el frontend puede grisar sin sacar nada de la lista. Las opciones de
+  `rango_fecha` siguen siendo mínimo y máximo globales, sin restringir por
+  los otros filtros.
 - **Paneles** (`dashboard/paneles.py`): KPIs en UNA consulta (todas las
   métricas juntas); gráfico = una métrica por una dimensión (alias
   `dimension`), línea ordenada por la dimensión, barras y torta por la
@@ -1160,6 +1212,19 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   propias o `entidad.campo`, con la clave primaria antepuesta como columna
   oculta (`__pk_*`) para que no se fundan filas iguales, paginado con
   `pagina`/`tamanio`, orden por alias o métrica, y `total` contado aparte.
+- **Filtrado asociativo en gráficos** (`GET /dashboard/graficos/{id}`,
+  desde la fase 4): en barras/torta SIN `top` cuya dimensión coincide con
+  un filtro `lista` que no está activo, si hay OTROS filtros activos se
+  completa el universo del campo con lo que falte, `[valor, None,
+  disponible=False]`, agregado al final de `filas`. Mismos recortes que
+  `disponibles` en las opciones: un filtro no se grisa a si mismo (si la
+  propia dimensión ya está filtrada, no se agrega nada) y sin otros
+  filtros activos tampoco (no hay nada que pudiera haber dejado algo en
+  cero). Los gráficos CON `top` (ej. "Top vendedores") nunca participan —
+  mezclar un ranking acotado con el universo completo no tiene sentido.
+  Sigue sin tocar `consultas/compilador.py`: es la consulta normal del
+  gráfico más `consulta_opciones_lista` (ya existía para las opciones de
+  filtro), fusionadas en el endpoint.
 - **El spec guarda `modelo_version`**. Si el modelo cambia después, `GET
   /dashboard` revalida y devuelve `advertencias` con los paneles rotos; esos
   paneles responden `E-CONS-01` hasta que se corrija el spec.
@@ -1185,7 +1250,15 @@ Los crea `backend/scripts/crear_organizacion.py demo` (idempotente):
   punta redondeada, horizontales para categorías y verticales para fechas;
   líneas de 2 px con área al 10 %; grilla hairline; textos siempre en tonos
   de tinta; tooltip con el formato de la métrica; "Ver tabla" en cada
-  gráfico. El tema se lee de las variables CSS (`tema.ts`).
+  gráfico. El tema se lee de las variables CSS (`tema.ts`). Filtrado
+  asociativo (desde la fase 4, patrón **"emphasis"** del skill `dataviz`):
+  una barra sin datos bajo los otros filtros activos (`disponible: false`
+  en `fila[2]`) se manda a ECharts como `{value: 0, itemStyle: {color:
+  --mudo}, label: {show: false}}` en vez de un número — sigue en el eje,
+  con su etiqueta, pero sin barra visible ni valor, y el tooltip dice
+  "Sin datos con los filtros activos" en vez del `valueFormatter`
+  genérico; en torta, la porción en gris es 0° de arco (invisible) pero
+  el nombre queda igual en la leyenda.
 - **Formato es-AR en `formato.ts`**: moneda sin decimales desde $ 10.000,
   compacto en ejes (`$ 48,3 M`), fechas `dd/mm/aaaa`, períodos `ene 2026` /
   `T1 2026` / `2026`. Los valores nulos se muestran como `—` y el grupo NULL

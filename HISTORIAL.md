@@ -1879,3 +1879,99 @@ demo real, en desktop (los 3 gráficos secundarios pasan de una grilla de
 2 confinada a 3 a todo el ancho) y en mobile (una sola columna, sin
 cambios). El click-to-filter de los gráficos y el arrastre para
 reordenar siguen andando igual que antes del cambio de layout.
+
+## 2026-09-13 — Filtrado asociativo completo: gráficos en gris (v0.29.01)
+
+Con la fase 3 y la fase 4 ya aceptadas, tocaba definir qué seguía. Se le
+presentaron a Sd los cinco pendientes que quedaban de la "Fase 4 —
+Profundidad" de la especificación original (`docs/especificacion-v1.md`
+§9): filtrado asociativo completo, texto estructurado con parser de
+Claude, reporte de calidad de datos, resubida con detección de cambios, y
+almacén S3/R2 + deploy en Render. Sd contestó "están todos ok, hagámoslo
+en el orden que consideres mejor" y de paso adelantó un tema pendiente:
+"esquemas de actualización de datos, ej. reemplazo total cada vez,
+esquema de novedades, etc." — ligado directamente al punto de resubida.
+
+Antes de tocar nada se armó y confirmó un orden (asociativo → resubida →
+calidad de datos → texto estructurado → S3/deploy) con la razón de cada
+posición: el asociativo primero porque ya estaba empezado (solo faltaban
+los gráficos); calidad de datos se apoya en el perfilado que ya existe;
+texto estructurado es lo más exploratorio, mejor con el resto asentado;
+S3/deploy al final porque necesita cuentas y credenciales de Sd y no
+bloquea nada de lo anterior. Sobre esquemas de actualización se
+adelantó una primera postura: empezar por "reemplazo total + reporte de
+diff" (lo mínimo que ya estaba anotado como pendiente desde el paso 3) en
+vez de saltar directo a un esquema incremental/de novedades, que es un
+cambio de arquitectura mucho más grande (necesita una clave declarada por
+fuente, decidir qué significa que una fila "no venga" en una subida
+nueva, y el almacén deja de ser "un Parquet por fuente"). Sd confirmó
+todo con "ok de acuerdo avanza".
+
+También en este intercambio se aclaró explícitamente algo del entorno:
+el sistema había activado "ultracode" (orquestación de varios agentes en
+paralelo vía la herramienta Workflow), pero se decidió NO usarlo para
+este proyecto — todo corre contra el mismo Postgres, el mismo Docker y
+el mismo repo git, con reglas estrictas de no correr dos `pytest` a la
+vez contra `uboard_test` y no dejar la demo alterada; paralelizar
+agentes ahí generaría carreras, no velocidad real. Se avisó a Sd y se
+siguió trabajando solo, como todo el resto de la sesión.
+
+Para el primer punto (filtrado asociativo completo), antes de escribir
+código se leyó el código actual (`Grafico.tsx`, `paneles.py`,
+`opciones.ts`) y se consultó el skill `dataviz` — encontró justo el
+patrón que hacía falta, **"emphasis"**: un valor en el acento de siempre,
+el resto en gris de-emphasis. Con eso resuelto, se presentaron tres
+decisiones concretas: (1) alcance = los mismos gráficos que ya son
+clickeables por el paso A (barras/torta cuya dimensión coincide con un
+filtro de lista existente); (2) tratamiento visual = mostrar el universo
+completo del campo, no solo lo que hoy tiene datos, grisando lo que
+diera cero bajo los otros filtros; (3) los gráficos con `top` (ej. "Top
+vendedores") quedan afuera, porque mezclar "el ranking de los mejores N"
+con "el universo completo" contradice el propio sentido del ranking. Sd
+contestó "sí, dejalo así" a las tres.
+
+La implementación no tocó `consultas/compilador.py` (sigue siendo el
+único lugar que escribe SQL): `GET /dashboard/graficos/{id}` sigue
+pidiendo la consulta normal del gráfico (con TODOS los filtros activos,
+sin cambios ahí) y, solo cuando corresponde, pide ADEMÁS el universo
+completo del campo con `consulta_opciones_lista` — la misma función que
+ya existía para las opciones de un filtro — y completa `filas` con lo
+que falte, marcado `disponible=False` y valor `None`. Dos guardas,
+calcadas de las que ya tenía `disponibles` en las opciones de filtro
+(paso 26): si la propia dimensión del gráfico ya está filtrada, no se
+grisa nada (la persona ya eligió a mano qué categorías quiere ver); si no
+hay NINGÚN otro filtro activo, tampoco se hace la consulta extra (no hay
+nada que pudiera haber dejado algo en cero). `GraficoSalida.filas` pasó
+de `[valor, métrica]` a `[valor, métrica, disponible]` — aditivo, nada
+del frontend que ya existía se rompió (solo leía las dos primeras
+posiciones).
+
+Del lado del frontend, la parte más interesante fue pensar cómo se ve
+honestamente un "cero grisado" en cada tipo de gráfico. En barras, la
+categoría se manda como un objeto `{value: 0, itemStyle: {color:
+--mudo}, label: {show: false}}` en vez de un número: sigue ocupando su
+lugar en el eje, con su nombre, pero sin barra visible ni etiqueta de
+valor, y se armó un tooltip a medida (reemplazando el `valueFormatter`
+genérico) que le avisa "Sin datos con los filtros activos" en vez de
+mostrar un `$0` engañoso. En torta se decidió NO inventar nada especial:
+una porción de valor cero es 0° de arco, invisible sea cual sea el color
+que se le ponga — pero el nombre igual queda listado en la leyenda
+(gris), que ya es la señal honesta de "esto existe, pero no tiene datos
+acá".
+
+Verificado en Docker contra la demo real, todo con pedidos de lectura
+(nada que limpiar después): un rango de fecha sin ningún dato dejó las 6
+categorías de "Ventas por categoría" en gris, con sus 6 nombres
+igualmente visibles en el eje; filtrando por un vendedor puntual en una
+ventana de 3 días concretos apareció un caso mixto real — 5 categorías
+con barra violeta y su valor, "Bebidas" sin barra ni valor, exactamente
+la mezcla esperada; confirmado que filtrar por la propia dimensión del
+gráfico (ej. Categoría) no agrega ningún gris; confirmado que "Top
+vendedores" (con `top=10`) nunca agrega grises aunque el resto de las
+condiciones se cumplan.
+
+4 tests nuevos de API (`test_grafico_grisa_categorias_sin_datos_bajo_
+otros_filtros`, `test_grafico_no_grisa_si_su_propio_filtro_esta_activo`,
+`test_grafico_con_top_no_se_grisa`, `test_grafico_sin_otros_filtros_no_
+grisa` — 365 en total). Sin tests nuevos de frontend, mismo criterio de
+siempre.

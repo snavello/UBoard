@@ -17,6 +17,20 @@ function etiqueta(valor: unknown, grafico: GraficoSalida): string {
   return String(valor);
 }
 
+// Filtrado asociativo (fase 4): fila[2] es "disponible" - false cuando el
+// valor existe en el universo del campo pero no tiene datos bajo los otros
+// filtros activos. Ver dashboard/paneles.py y el endpoint de graficos.
+function disponible(fila: GraficoSalida["filas"][number]): boolean {
+  return fila[2] !== false;
+}
+
+// "emphasis" del skill dataviz: disponible en el acento de siempre, el resto
+// en gris de-emphasis (--mudo), sin etiqueta (no hay valor real que mostrar).
+function datoDeBarra(fila: GraficoSalida["filas"][number], tema: Tema) {
+  if (disponible(fila)) return fila[1];
+  return { value: 0, disponible: false as const, itemStyle: { color: tema.mudo }, label: { show: false } };
+}
+
 function ejeValor(grafico: GraficoSalida, tema: Tema) {
   return {
     type: "value" as const,
@@ -89,7 +103,7 @@ function opcionLinea(grafico: GraficoSalida, tema: Tema): EChartsOption {
 
 function opcionBarras(grafico: GraficoSalida, tema: Tema): EChartsOption {
   const categorias = grafico.filas.map((fila) => etiqueta(fila[0], grafico));
-  const valores = grafico.filas.map((fila) => fila[1]);
+  const valores = grafico.filas.map((fila) => datoDeBarra(fila, tema));
   const horizontal = grafico.dimension.tipo !== "fecha";
   const pocas = valores.length <= 12;
   const serie = {
@@ -110,7 +124,22 @@ function opcionBarras(grafico: GraficoSalida, tema: Tema): EChartsOption {
   return {
     animationDuration: 300,
     grid: { left: 8, right: pocas && horizontal ? 64 : 16, top: 16, bottom: 8, containLabel: true },
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, ...tooltipBase(grafico, tema) },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      backgroundColor: tema.superficie,
+      borderColor: tema.grilla,
+      textStyle: { color: tema.tinta, fontFamily: tema.fuente },
+      formatter: (parametrosCrudos: unknown) => {
+        const parametros = (Array.isArray(parametrosCrudos) ? parametrosCrudos[0] : parametrosCrudos) as { name: string; data: unknown };
+        const dato = parametros.data;
+        if (typeof dato === "object" && dato !== null && (dato as { disponible?: boolean }).disponible === false) {
+          return `${parametros.name}<br/><span style="color:${tema.mudo}">Sin datos con los filtros activos</span>`;
+        }
+        const valor = typeof dato === "object" && dato !== null ? (dato as { value: number }).value : (dato as number);
+        return `${parametros.name}<br/><strong>${formatearMetrica(valor, grafico.metrica.formato)}</strong>`;
+      },
+    },
     xAxis: horizontal ? ejeValor(grafico, tema) : ejeCategoria(categorias, tema, { rotar: categorias.length > 8 }),
     yAxis: horizontal ? ejeCategoria(categorias, tema, { inverso: true }) : ejeValor(grafico, tema),
     series: [serie],
@@ -118,7 +147,13 @@ function opcionBarras(grafico: GraficoSalida, tema: Tema): EChartsOption {
 }
 
 function opcionTorta(grafico: GraficoSalida, tema: Tema): EChartsOption {
-  const datos = grafico.filas.map((fila) => ({ name: etiqueta(fila[0], grafico), value: fila[1] ?? 0 }));
+  const datos = grafico.filas.map((fila) => {
+    const base = { name: etiqueta(fila[0], grafico), value: fila[1] ?? 0 };
+    // Filtrado asociativo: una porcion sin datos bajo los otros filtros
+    // activos no llega a verse (0° de arco), pero sigue en la leyenda,
+    // grisada, en vez de faltar directamente.
+    return disponible(fila) ? base : { ...base, itemStyle: { color: tema.mudo }, label: { show: false } };
+  });
   return {
     animationDuration: 300,
     color: tema.series,

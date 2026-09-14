@@ -96,6 +96,44 @@ def test_los_filtros_afectan_a_todo(cliente, dashboard):
     assert explorador["total"] == kpis["k_cantidad"]
 
 
+def test_grafico_grisa_categorias_sin_datos_bajo_otros_filtros(cliente, dashboard):
+    """Filtrado asociativo en graficos (fase 4): un rango de fecha SIN ningun
+    dato (ningun mes de 2030 existe en el dataset de prueba) deja el grafico
+    sin filas reales, asi que TODO el universo de categorias tiene que volver
+    marcado disponible=False, con valor None."""
+    sin_datos = _filtros(f_fecha=["2030-01-01", "2030-01-02"])
+    categorias = cliente.get(_ruta(dashboard, "/graficos/g_categorias"), params={"filtros": sin_datos}).json()
+    assert categorias["filas"]
+    assert all(fila[1] is None and fila[2] is False for fila in categorias["filas"])
+    nombres = {fila[0] for fila in categorias["filas"]}
+    assert {"Almacén", "Bebidas", "Limpieza"} <= nombres  # categorias reales, ninguna con datos ese rango
+
+
+def test_grafico_no_grisa_si_su_propio_filtro_esta_activo(cliente, dashboard):
+    """Si la persona ya filtro exactamente por la dimension del grafico, no
+    hay nada que grisar: ya eligio a mano que quiere ver."""
+    propio = _filtros(f_categoria=["Almacén"])
+    categorias = cliente.get(_ruta(dashboard, "/graficos/g_categorias"), params={"filtros": propio}).json()
+    assert categorias["filas"]
+    assert all(fila[2] is True for fila in categorias["filas"])
+    assert {fila[0] for fila in categorias["filas"]} == {"Almacén"}
+
+
+def test_grafico_con_top_no_se_grisa(cliente, dashboard):
+    """g_vendedores tiene top=10: mezclar "el ranking de los mejores 10" con
+    "el universo completo grisado" no tiene sentido, asi que queda afuera."""
+    sin_datos = _filtros(f_fecha=["2030-01-01", "2030-01-02"])
+    vendedores = cliente.get(_ruta(dashboard, "/graficos/g_vendedores"), params={"filtros": sin_datos}).json()
+    assert vendedores["filas"] == []
+
+
+def test_grafico_sin_otros_filtros_no_grisa(cliente, dashboard):
+    """Sin ningun OTRO filtro activo, no hay nada que pueda haber dejado una
+    categoria en cero: no vale la pena la consulta extra del universo."""
+    categorias = cliente.get(_ruta(dashboard, "/graficos/g_categorias")).json()
+    assert all(fila[2] is True for fila in categorias["filas"])
+
+
 def test_opciones_de_filtros(cliente, dashboard):
     sucursal = cliente.get(_ruta(dashboard, "/filtros/f_sucursal/opciones")).json()
     assert sucursal == {
